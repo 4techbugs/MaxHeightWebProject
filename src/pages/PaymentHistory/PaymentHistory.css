@@ -1,0 +1,10 @@
+.eb-ph-toolbar { padding: 16px 20px 12px; border-bottom: 1px solid var(--eb-line); }
+.eb-ph-search { display: flex; align-items: center; gap: 10px; max-width: 420px; width: 100%; padding: 0 14px; min-height: 42px; border: 1px solid #d9e0eb; border-radius: 10px; background: #fff; color: var(--eb-muted); transition: 0.2s ease; }
+.eb-ph-search:focus-within { border-color: var(--eb-blue); box-shadow: 0 0 0 4px rgba(23, 105, 224, 0.1); }
+.eb-ph-search input { width: 100%; border: 0; outline: 0; background: transparent; font-size: 13px; color: var(--eb-ink); }
+.eb-ph-search input::placeholder { color: #8a95a7; }
+.eb-ph-method { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--eb-ink); }
+.eb-ph-method-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; }
+.eb-ph-method-online { background: var(--eb-blue-soft); color: var(--eb-blue); }
+.eb-ph-method-cash { background: var(--eb-green-soft); color: var(--eb-green); }
+.eb-ph-method-bank { background: var(--eb-purple-soft); color: var(--eb-purple); }

@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+
+:root {
+  --eb-blue: #1769e0;
+  --eb-blue-dark: #0d47a1;
+  --eb-blue-light: #4d8dff;
+  --eb-blue-soft: #eaf2ff;
+  --eb-ink: #14213d;
+  --eb-muted: #6b7891;
+  --eb-line: #e5eaf2;
+  --eb-bg: #f0f4fa;
+  --eb-green: #159a67;
+  --eb-green-light: #1bb873;
+  --eb-green-soft: #e6f8ef;
+  --eb-orange: #e28b24;
+  --eb-orange-light: #f59e0b;
+  --eb-orange-soft: #fff3e2;
+  --eb-red: #d94e4e;
+  --eb-red-soft: #fff0f0;
+  --eb-purple: #765bd4;
+  --eb-purple-soft: #f0edff;
+  --eb-teal: #0d9488;
+  --eb-teal-soft: #ccfbf1;
+  --eb-pink: #db2777;
+  --eb-pink-soft: #fce7f3;
+  --eb-grad-blue: linear-gradient(135deg, #1769e0, #0d47a1);
+  --eb-grad-green: linear-gradient(135deg, #1bb873, #159a67);
+  --eb-grad-orange: linear-gradient(135deg, #f59e0b, #e28b24);
+  --eb-grad-purple: linear-gradient(135deg, #8b5cf6, #765bd4);
+  --eb-grad-teal: linear-gradient(135deg, #14b8a6, #0d9488);
+  --eb-grad-pink: linear-gradient(135deg, #ec4899, #db2777);
+  --eb-shadow-sm: 0 2px 8px rgba(28, 53, 90, .06);
+  --eb-shadow: 0 5px 20px rgba(28, 53, 90, .08);
+  --eb-shadow-md: 0 8px 28px rgba(28, 53, 90, .12);
+  --eb-shadow-blue: 0 6px 18px rgba(23, 105, 224, .22);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { min-height: 100%; }
+body { margin: 0; font-family: 'DM Sans', sans-serif; background: #f0f4fa; color: #14213d; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: none; }

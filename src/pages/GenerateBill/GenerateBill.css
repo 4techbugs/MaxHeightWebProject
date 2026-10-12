@@ -1,0 +1,89 @@
+.eb-gen-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; align-items: start; }
+.eb-gen-actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 24px 24px; }
+.eb-gen-summary-body { padding: 22px 24px; display: grid; gap: 14px; }
+.eb-gen-slab { background: linear-gradient(135deg, #f8fafc, #f0f4fa); border: 1px solid var(--eb-line); border-radius: 12px; padding: 16px; display: grid; gap: 10px; }
+.eb-gen-slab h3 { margin: 0 0 4px; font: 700 12px 'Plus Jakarta Sans'; color: var(--eb-ink); display: flex; align-items: center; gap: 7px; }
+.eb-gen-slab h3::before { content: ""; width: 4px; height: 14px; border-radius: 3px; background: var(--eb-grad-orange); }
+.eb-gen-slab div { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--eb-muted); }
+.eb-gen-slab strong { color: var(--eb-ink); font-weight: 700; }
+.eb-gen-line { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid #edf0f5; font-size: 13px; color: var(--eb-muted); }
+.eb-gen-line strong { color: var(--eb-ink); font: 700 15px 'Plus Jakarta Sans'; }
+.eb-gen-total { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; padding: 20px 22px; border-radius: 13px; background: var(--eb-grad-blue); color: #fff; box-shadow: var(--eb-shadow-blue); }
+.eb-gen-total span { font-size: 13px; font-weight: 600; opacity: .9; }
+.eb-gen-total strong { font: 800 26px 'Plus Jakarta Sans'; }
+.eb-gen-calculated { background: var(--eb-green-soft); color: #13804f; border: 1px solid #c4f0d8; border-radius: 10px; padding: 12px 15px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.eb-gen-calculated::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--eb-green); }
+.eb-legacy-select { width: 100%; border: 1px solid var(--eb-line); border-radius: 10px; padding: 12px 14px; font-size: 14px; color: var(--eb-ink); background: #fff; }
+.eb-legacy-bind { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px; border: 1px solid #dfe6f1; background: linear-gradient(135deg, #f7fbff, #edf5ff); border-radius: 12px; }
+.eb-legacy-bind-row { background: rgba(255,255,255,.65); border: 1px solid rgba(122,142,174,.18); border-radius: 9px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.eb-legacy-bind-row span { color: var(--eb-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.eb-legacy-bind-row strong { color: var(--eb-ink); font-size: 13px; font-weight: 700; }
+.eb-legacy-print-sheet { display: none; }
+.eb-ref-bill-sheet { width: 100%; max-width: 820px; margin: 0 auto; background: #f4f4f4; border: 2px solid #7e7e7e; box-sizing: border-box; font-family: Georgia, 'Times New Roman', serif; }
+.eb-ref-title-row { background: rgba(0,0,0,0.06); border-bottom: 1px solid rgba(0,0,0,0.2); text-align: center; font-size: clamp(20px, 2vw, 34px); font-weight: 800; letter-spacing: .02em; padding: 14px 12px 12px; text-transform: uppercase; }
+.eb-ref-company-row { border-bottom: 1px solid rgba(0,0,0,0.25); background: rgba(255,255,255,0.08); padding: 12px 18px 12px; text-align: center; }
+.eb-ref-company-name { font-size: clamp(20px, 1.5vw, 28px); font-weight: 700; margin-bottom: 4px; }
+.eb-ref-company-address { font-size: 12px; line-height: 1.5; }
+.eb-ref-main-grid { display: grid; grid-template-columns: 1.3fr 1fr; min-height: 320px; }
+.eb-ref-left-col, .eb-ref-right-col { padding: 10px 16px 0; }
+.eb-ref-field-row, .eb-ref-meta-row { display: flex; align-items: center; gap: 12px; font-size: 16px; margin-bottom: 12px; min-height: 28px; }
+.eb-ref-field-row span, .eb-ref-meta-row span { font-weight: 700; min-width: 90px; }
+.eb-ref-field-row strong, .eb-ref-meta-row strong { font-weight: 700; }
+.eb-ref-field-row.address-row { align-items: flex-start; }
+.eb-ref-field-row.address-row strong { display: inline-block; max-width: 420px; line-height: 1.4; }
+.eb-ref-field-row.compact { margin-top: 8px; }
+.eb-ref-field-row.flat-row { margin-top: 12px; }
+.eb-ref-field-row.contact-row { margin-top: 14px; }
+.eb-ref-right-col { display: flex; flex-direction: column; justify-content: flex-start; }
+.eb-ref-meta-row { flex-wrap: wrap; }
+.eb-ref-meta-row strong { display: inline-block; }
+.eb-ref-separator { margin-left: 18px; }
+.eb-ref-meta-row.date-row { margin-top: 10px; }
+
+@media (max-width: 1100px) { .eb-gen-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .eb-gen-actions .eb-btn { flex: 1; } .eb-legacy-bind { grid-template-columns: 1fr; } }
+
+@media print {
+  .eb-shell, .eb-shell > .eb-content { display: block !important; }
+  .eb-sidebar, .eb-navbar, .eb-page-heading, .eb-card, .eb-gen-actions, .eb-gen-summary, .eb-gen-form { display: none !important; }
+  .eb-legacy-print-sheet { position: relative; display: block !important; width: 100%; min-height: 100vh; padding: 0; background: #fff; color: #111827; overflow: hidden; }
+  .eb-ref-bill-sheet { max-width: none; border: 2px solid #7a7a7a; }
+}
+@media (max-width: 1100px) { .eb-gen-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .eb-gen-actions .eb-btn { flex: 1; } .eb-legacy-bind { grid-template-columns: 1fr; } }
+
+@media print {
+  .eb-shell, .eb-shell > .eb-content { display: block !important; }
+  .eb-sidebar, .eb-navbar, .eb-page-heading, .eb-card, .eb-gen-actions, .eb-gen-summary, .eb-gen-form { display: none !important; }
+  .eb-legacy-print-sheet { position: relative; display: block !important; width: 100%; min-height: 100vh; padding: 0; background: #fff; color: #111827; overflow: hidden; }
+  .eb-print-header-panel, .eb-print-body { position: relative; z-index: 1; }
+  .eb-print-header-panel { margin: 0; border: 2px solid #0d4d7a; }
+  .eb-print-header-main { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; background: #0d4d7a; color: #fff; }
+  .eb-print-brand { font-size: 32px; font-weight: 800; letter-spacing: -.03em; }
+  .eb-print-subtitle { font-size: 12px; opacity: .8; }
+  .eb-print-bill-side { text-align: right; }
+  .eb-print-bill-title { font-size: 30px; font-weight: 800; letter-spacing: .04em; }
+  .eb-print-bill-no { font-size: 12px; line-height: 1.7; }
+  .eb-print-body { display: block; padding: 18px 24px 24px; }
+  .eb-print-section-block, .eb-print-subsection { border: 1px solid #bfd0e7; background: #eaf3fb; }
+  .eb-print-section-title { background: #dbeaf9; color: #163c66; font-size: 17px; font-weight: 800; padding: 10px 14px; text-transform: uppercase; }
+  .eb-print-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .eb-print-detail-row { display: grid; grid-template-columns: 1fr 1.2fr; border-top: 1px solid #c7d8eb; }
+  .eb-print-detail-label, .eb-print-detail-row strong { min-height: 32px; display: flex; align-items: center; padding: 0 10px; }
+  .eb-print-detail-label { background: #edf5ff; color: #1d3557; font-size: 11px; font-weight: 700; }
+  .eb-print-detail-row strong { background: rgba(255,255,255,.35); color: #0f172a; font-size: 12px; font-weight: 700; }
+  .eb-print-two-col-box { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+  .eb-print-table-head, .eb-print-table-row { display: grid; grid-template-columns: 1fr 1fr 0.75fr 0.9fr; }
+  .eb-print-table-head { background: #edf5ff; color: #1d3557; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .eb-print-table-head span, .eb-print-table-row span { min-height: 28px; display: flex; align-items: center; justify-content: center; padding: 6px 8px; border-right: 1px solid #c9d8ec; border-bottom: 1px solid #c9d8ec; }
+  .eb-print-table-head span:last-child, .eb-print-table-row span:last-child { border-right: 0; }
+  .eb-print-table-row { background: rgba(255,255,255,.35); }
+  .eb-print-table-row.alt { background: rgba(255,255,255,.15); }
+  .eb-print-energy-title { background: #dbeaf9; color: #163c66; font-size: 16px; font-weight: 800; padding: 10px 12px; text-transform: uppercase; border-top: 1px solid #c2d1e5; }
+  .eb-print-energy-list { display: grid; }
+  .eb-print-energy-list div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 12px; border-bottom: 1px solid #c9d8ec; font-size: 12px; }
+  .eb-print-energy-list div:last-child { border-bottom: 0; }
+  .eb-print-table.billing .eb-print-table-head, .eb-print-table.billing .eb-print-table-row { grid-template-columns: 0.5fr 1.8fr 0.8fr; }
+  .eb-print-table.billing .eb-print-table-row span:last-child { justify-content: flex-end; }
+  .eb-print-table.billing .eb-print-table-row span { justify-content: flex-start; }
+}

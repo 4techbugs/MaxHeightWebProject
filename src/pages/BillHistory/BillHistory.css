@@ -1,0 +1,14 @@
+.eb-bh-filters { display: flex; align-items: flex-end; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--eb-line); flex-wrap: wrap; }
+.eb-bh-search { display: flex; align-items: center; gap: 10px; color: #99a5b8; border: 1px solid #d9e0eb; border-radius: 10px; padding: 11px 14px; flex: 1; min-width: 240px; transition: .2s; background: #fff; }
+.eb-bh-search:focus-within { border-color: var(--eb-blue); box-shadow: 0 0 0 4px rgba(23,105,224,.1); }
+.eb-bh-search input { border: 0; outline: 0; background: transparent; width: 100%; font-size: 13px; color: var(--eb-ink); }
+.eb-bh-filter-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.eb-bh-select { display: flex; align-items: center; gap: 8px; border: 1px solid #d9e0eb; border-radius: 10px; padding: 0 12px; color: #99a5b8; background: #fff; transition: .2s; }
+.eb-bh-select:focus-within { border-color: var(--eb-blue); box-shadow: 0 0 0 4px rgba(23,105,224,.1); }
+.eb-bh-select select { border: 0; outline: 0; background: transparent; padding: 11px 0; font-size: 13px; color: var(--eb-ink); }
+.eb-bh-date { display: grid; gap: 4px; }
+.eb-bh-date label { font-size: 10px; font-weight: 700; color: var(--eb-muted); }
+.eb-bh-date input { border: 1px solid #d9e0eb; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--eb-ink); outline: none; transition: .2s; }
+.eb-bh-date input:focus { border-color: var(--eb-blue); box-shadow: 0 0 0 4px rgba(23,105,224,.1); }
+.eb-bh-actions { display: flex; gap: 4px; }
+@media (max-width: 600px) { .eb-bh-filters { flex-direction: column; align-items: stretch; } .eb-bh-search { min-width: 0; } }

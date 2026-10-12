@@ -1,0 +1,22 @@
+PowerPay live API update
+
+Problem found:
+- Live URL /api/admin/payments/import returns 404 because the deployed API is older.
+- The current API in this package includes POST /api/admin/payments/import.
+
+Upload target from screenshot:
+- Server path: /superadmin/maxheight.4techbugs.in/wwwroot/api
+
+Upload steps:
+1. Take a backup of the current live api folder first.
+2. Upload the contents of NewUpload/api into the live api folder.
+   - Copy package.json
+   - Copy package-lock.json
+   - Copy the server folder
+3. Do not overwrite the live .env file unless you intentionally want to change DB/API settings.
+4. On the server, run npm install inside the api folder only if dependencies are missing or outdated.
+5. Restart the Node/API process or IIS app pool after upload.
+
+Expected check:
+- POST http://maxheight.4techbugs.in/api/admin/payments/import should no longer return 404.
+- If the request data has a workbook/row issue, it should return a JSON validation message instead.

@@ -1,0 +1,7 @@
+.eb-stat-card { display: flex; gap: 16px; padding: 22px; background: #fff; border: 1px solid var(--eb-line); border-radius: 16px; box-shadow: var(--eb-shadow); transition: .25s; position: relative; overflow: hidden; }
+.eb-stat-card::after { content: ""; position: absolute; right: -20px; top: -20px; width: 90px; height: 90px; border-radius: 50%; opacity: .04; }
+.eb-stat-card:hover { transform: translateY(-3px); box-shadow: var(--eb-shadow-md); }
+.eb-stat-icon { width: 48px; height: 48px; flex-shrink: 0; display: grid; place-items: center; border-radius: 13px; color: #fff; }
+.eb-stat-icon-blue { background: var(--eb-grad-blue); box-shadow: var(--eb-shadow-blue); } .eb-stat-icon-green { background: var(--eb-grad-green); box-shadow: 0 6px 18px rgba(21,154,103,.22); } .eb-stat-icon-orange { background: var(--eb-grad-orange); box-shadow: 0 6px 18px rgba(229,139,36,.22); } .eb-stat-icon-purple { background: var(--eb-grad-purple); box-shadow: 0 6px 18px rgba(118,91,212,.22); }
+.eb-stat-content { display: grid; gap: 6px; min-width: 0; } .eb-stat-content > span { color: var(--eb-muted); font-size: 12px; font-weight: 600; } .eb-stat-content > strong { color: var(--eb-ink); font: 800 24px 'Plus Jakarta Sans'; letter-spacing: -.7px; }
+.eb-stat-content div { display: flex; align-items: center; gap: 7px; } .eb-stat-content b { display: inline-flex; align-items: center; color: var(--eb-green); font-size: 11px; font-weight: 700; } .eb-stat-content b.eb-stat-down { color: var(--eb-red); } .eb-stat-content small { color: #a0aabe; font-size: 10px; }
