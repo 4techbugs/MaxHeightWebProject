@@ -9,7 +9,7 @@ const slabs = [
   { upTo: 50, rate: 4.75, label: "0–50 units" },
   { upTo: 150, rate: 6.0, label: "51–150 units" },
   { upTo: 500, rate: 7.0, label: "151–500 units" },
-  { upTo: Infinity, rate: 7.3, label: "Above 500 units" },
+  { upTo: Infinity, rate: 7.5, label: "Above 500 units" },
 ];
 
 function calcGrid(units) {

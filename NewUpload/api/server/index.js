@@ -11,7 +11,7 @@ const port = Number(process.env.API_PORT || 3001);
 const otpStore = new Map();
 const clientSessions = new Map();
 const CLIENT_SESSION_DURATION = 8 * 60 * 60 * 1000;
-const DEFAULT_LOCAL_ADMIN = Object.freeze({ username: "admin", password: "admin" });
+const DEFAULT_LOCAL_ADMIN = Object.freeze({ username: "Admin", password: "Admin@123" });
 const ELECTRIC_BILL_COLUMNS = [
   "FlatID", "CustomerID", "BillDate", "DueDate", "FromDate", "ToDate",
   "Unit", "Charge", "CreatedBy", "CreatedDate", "CreatedTime", "ModifiedBy",
@@ -24,8 +24,8 @@ const ELECTRIC_BILL_COLUMNS = [
 function isLocalDefaultAdmin(username, password) {
   return (
     process.env.NODE_ENV !== "production" &&
-    String(username || "").trim().toLowerCase() === DEFAULT_LOCAL_ADMIN.username &&
-    String(password || "") === DEFAULT_LOCAL_ADMIN.password
+    String(username || "").trim().toLowerCase() === DEFAULT_LOCAL_ADMIN.username.toLowerCase() &&
+    String(password || "").toLowerCase() === DEFAULT_LOCAL_ADMIN.password.toLowerCase()
   );
 }
 
@@ -1262,6 +1262,21 @@ app.post("/api/bills", async (request, response) => {
   try {
     await ensureElectricBillTable();
     const pool = await getDbPool();
+    await pool.request().query(`
+      IF OBJECT_ID(N'[dbo].[tb_BillReceiptCounter]', N'U') IS NULL
+      BEGIN
+        CREATE TABLE [dbo].[tb_BillReceiptCounter] ([CounterID] INT NOT NULL PRIMARY KEY, [NextValue] INT NOT NULL);
+      END;
+      IF NOT EXISTS (SELECT 1 FROM [dbo].[tb_BillReceiptCounter] WITH (UPDLOCK, HOLDLOCK) WHERE [CounterID] = 1)
+        INSERT INTO [dbo].[tb_BillReceiptCounter] ([CounterID], [NextValue]) VALUES (1, 1);
+    `);
+    const receiptNumberResult = await pool.request().query(`
+      UPDATE [dbo].[tb_BillReceiptCounter] WITH (UPDLOCK, ROWLOCK)
+      SET [NextValue] = [NextValue] + 1
+      OUTPUT DELETED.[NextValue] AS [ReceiptNumber]
+      WHERE [CounterID] = 1;
+    `);
+    const receiptNumber = String(receiptNumberResult.recordset[0].ReceiptNumber).padStart(3, "0");
     let databaseFlatId = payload.FlatID;
     let databaseCustomerId = payload.CustomerID;
     if (!/^\d+$/.test(String(payload.FlatID))) {
@@ -1310,7 +1325,7 @@ app.post("/api/bills", async (request, response) => {
       ModifiedDate: payload.ModifiedDate,
       ModifiedTime: payload.ModifiedTime,
       Status: payload.Status,
-      ReceiptID: columnTypes.get("ReceiptID") === "int" ? integerValue(payload.ReceiptID, Date.now() % 2147483647) : payload.ReceiptID,
+      ReceiptID: columnTypes.get("ReceiptID") === "int" ? Number(receiptNumber) : receiptNumber,
       ChargeAmount: payload.ChargeAmount,
       RateAmount: payload.RateAmount,
       FuelSearchCharge: payload.FuelSearchCharge,

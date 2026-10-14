@@ -11,7 +11,11 @@ const port = Number(process.env.API_PORT || 3001);
 const otpStore = new Map();
 const clientSessions = new Map();
 const CLIENT_SESSION_DURATION = 8 * 60 * 60 * 1000;
-const DEFAULT_LOCAL_ADMIN = Object.freeze({ username: "admin", password: "admin" });
+const DEFAULT_LOCAL_ADMIN = Object.freeze({ username: "Admin", password: "Admin@123" });
+const CONFIGURED_ADMIN = Object.freeze({
+  username: String(process.env.ADMIN_USERNAME || DEFAULT_LOCAL_ADMIN.username).trim(),
+  password: String(process.env.ADMIN_PASSWORD || DEFAULT_LOCAL_ADMIN.password),
+});
 const ELECTRIC_BILL_COLUMNS = [
   "FlatID", "CustomerID", "BillDate", "DueDate", "FromDate", "ToDate",
   "Unit", "Charge", "CreatedBy", "CreatedDate", "CreatedTime", "ModifiedBy",
@@ -21,12 +25,24 @@ const ELECTRIC_BILL_COLUMNS = [
   "DGAmount", "Address", "Remarks"
 ];
 
-function isLocalDefaultAdmin(username, password) {
-  return (
+function isConfiguredAdmin(username, password) {
+  const candidateUsername = String(username || "").trim();
+  const candidatePassword = String(password || "");
+
+  if (!candidateUsername || !candidatePassword) {
+    return false;
+  }
+
+  const matchesLocalFallback =
     process.env.NODE_ENV !== "production" &&
-    String(username || "").trim().toLowerCase() === DEFAULT_LOCAL_ADMIN.username &&
-    String(password || "") === DEFAULT_LOCAL_ADMIN.password
-  );
+    candidateUsername.toLowerCase() === DEFAULT_LOCAL_ADMIN.username.toLowerCase() &&
+    candidatePassword.toLowerCase() === DEFAULT_LOCAL_ADMIN.password.toLowerCase();
+
+  const matchesConfiguredAdmin =
+    candidateUsername.toLowerCase() === CONFIGURED_ADMIN.username.toLowerCase() &&
+    candidatePassword.toLowerCase() === CONFIGURED_ADMIN.password.toLowerCase();
+
+  return matchesLocalFallback || matchesConfiguredAdmin;
 }
 
 async function ensureElectricBillTable() {
@@ -425,8 +441,13 @@ app.post("/api/auth/admin-login", async (request, response) => {
     return response.status(400).json({ message: "Enter your username and password." });
   }
 
-  if (isLocalDefaultAdmin(username, password)) {
-    return response.json({ authenticated: true, role: "admin", username: DEFAULT_LOCAL_ADMIN.username, source: "local-fallback" });
+  if (isConfiguredAdmin(username, password)) {
+    return response.json({
+      authenticated: true,
+      role: "admin",
+      username: CONFIGURED_ADMIN.username,
+      source: process.env.NODE_ENV === "production" ? "configured-admin" : "local-fallback",
+    });
   }
 
   try {
@@ -1262,6 +1283,21 @@ app.post("/api/bills", async (request, response) => {
   try {
     await ensureElectricBillTable();
     const pool = await getDbPool();
+    await pool.request().query(`
+      IF OBJECT_ID(N'[dbo].[tb_BillReceiptCounter]', N'U') IS NULL
+      BEGIN
+        CREATE TABLE [dbo].[tb_BillReceiptCounter] ([CounterID] INT NOT NULL PRIMARY KEY, [NextValue] INT NOT NULL);
+      END;
+      IF NOT EXISTS (SELECT 1 FROM [dbo].[tb_BillReceiptCounter] WITH (UPDLOCK, HOLDLOCK) WHERE [CounterID] = 1)
+        INSERT INTO [dbo].[tb_BillReceiptCounter] ([CounterID], [NextValue]) VALUES (1, 1);
+    `);
+    const receiptNumberResult = await pool.request().query(`
+      UPDATE [dbo].[tb_BillReceiptCounter] WITH (UPDLOCK, ROWLOCK)
+      SET [NextValue] = [NextValue] + 1
+      OUTPUT DELETED.[NextValue] AS [ReceiptNumber]
+      WHERE [CounterID] = 1;
+    `);
+    const receiptNumber = String(receiptNumberResult.recordset[0].ReceiptNumber).padStart(3, "0");
     let databaseFlatId = payload.FlatID;
     let databaseCustomerId = payload.CustomerID;
     if (!/^\d+$/.test(String(payload.FlatID))) {
@@ -1310,7 +1346,7 @@ app.post("/api/bills", async (request, response) => {
       ModifiedDate: payload.ModifiedDate,
       ModifiedTime: payload.ModifiedTime,
       Status: payload.Status,
-      ReceiptID: columnTypes.get("ReceiptID") === "int" ? integerValue(payload.ReceiptID, Date.now() % 2147483647) : payload.ReceiptID,
+      ReceiptID: columnTypes.get("ReceiptID") === "int" ? Number(receiptNumber) : receiptNumber,
       ChargeAmount: payload.ChargeAmount,
       RateAmount: payload.RateAmount,
       FuelSearchCharge: payload.FuelSearchCharge,
@@ -1447,8 +1483,10 @@ app.get("/api/bills", async (request, response) => {
       filter = `WHERE CONVERT(NVARCHAR(50), [FlatID]) = @flat OR CONVERT(NVARCHAR(50), [FlatID]) = CONVERT(NVARCHAR(50), (SELECT TOP (1) [AssignFlatID] FROM [dbo].[AssignFlat] WHERE [UnitNo] = @flat))`;
     }
     const result = await requestBuilder.query(`
-      SELECT bills.*, customer_details.[Address] AS [CustomerAddress]
+      SELECT bills.*, customer_details.[Address] AS [CustomerAddress], af.[UnitNo]
       FROM [dbo].[tb_ElectricBill] AS bills
+      LEFT JOIN [dbo].[AssignFlat] AS af
+        ON CONVERT(NVARCHAR(50), af.[AssignFlatID]) = CONVERT(NVARCHAR(50), bills.[FlatID])
       LEFT JOIN [dbo].[Customer] AS customer_details
         ON LTRIM(RTRIM(CONVERT(NVARCHAR(50), customer_details.[CustomerID]))) = LTRIM(RTRIM(CONVERT(NVARCHAR(50), bills.[CustomerID])))
       ${filter}

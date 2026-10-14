@@ -59,27 +59,28 @@ const createMonthlyRow = (date = new Date(), arrears = "0") => {
   };
 };
 
-function calculateSlab(units, slabs) {
-  let remaining = units;
+const unitSlabs = [
+  { upTo: 50, rate: 4.75, label: "0 - 50 units" },
+  { upTo: 150, rate: 6.0, label: "51 - 150 units" },
+  { upTo: 500, rate: 7.0, label: "151 - 500 units" },
+  { upTo: Infinity, rate: 7.5, label: "Above 500 units" },
+];
+
+function calculateSlab(units) {
+  let remaining = Math.max(0, Number(units) || 0);
   let previous = 0;
   let rateAmount = 0;
-  let chargeAmount = 0;
-  for (const slab of slabs) {
-    if (remaining <= 0) break;
-    const upper = Number(slab.UnitSlab2);
-    const lower = Number(slab.UnitSlab1 ?? previous);
-    const used = Math.min(remaining, Math.max(0, upper - Math.max(previous, lower)));
-    rateAmount += used * Number(slab.Rate || 0);
-    chargeAmount += used * Number(slab.Charge || 0);
+  const breakdown = [];
+  for (const slab of unitSlabs) {
+    const capacity = slab.upTo - previous;
+    const used = Math.min(remaining, capacity);
+    if (used > 0) breakdown.push({ label: slab.label, units: used, rate: slab.rate, amount: used * slab.rate });
+    rateAmount += used * slab.rate;
     remaining -= used;
-    previous = upper;
+    previous = slab.upTo;
+    if (remaining <= 0) break;
   }
-  if (remaining > 0 && slabs.length) {
-    const last = slabs[slabs.length - 1];
-    rateAmount += remaining * Number(last.Rate || 0);
-    chargeAmount += remaining * Number(last.Charge || 0);
-  }
-  return { rateAmount, chargeAmount };
+  return { rateAmount, chargeAmount: 0, breakdown };
 }
 
 function AdminGenerateBill() {
@@ -109,7 +110,7 @@ function AdminGenerateBill() {
   const monthlyWorkbookRef = useRef(null);
   const set = (field) => (event) => { setForm((current) => ({ ...current, [field]: event.target.value })); setSaved(false); };
   const values = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, Number(value) || 0]));
-  const slabAmounts = useMemo(() => calculateSlab(values.grid, billRates.slabs), [values.grid, billRates.slabs]);
+  const slabAmounts = useMemo(() => calculateSlab(values.grid), [values.grid]);
   const fixedCharges = 495;
   const dgAmount = values.gd * values.dgCharge;
   const masterAmount = (type) => Number(billRates.masters?.find((master) => master.MasterType === type)?.Amount || 0);
@@ -140,7 +141,7 @@ function AdminGenerateBill() {
     const arrears = Number(row.arrears) || 0;
     const penalty = Number(row.penalty) || 0;
     const discount = Number(row.discount) || 0;
-    const slab = calculateSlab(grid, billRates.slabs);
+    const slab = calculateSlab(grid);
     const monthlyDgAmount = gd * 26;
     const fuel = grid * masterAmount("Fuel Search Charges");
     const duty = grid * masterAmount("Duty");

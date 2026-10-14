@@ -13,6 +13,8 @@ const dateText = (input) => input ? new Date(input).toLocaleDateString("en-IN") 
 const shortDateText = (input) => input ? new Date(input).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "-";
 const escapeHtml = (input) => String(input ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 
+const billDisplayNo = (id, billDate) => { const date = billDate ? new Date(billDate) : new Date(); const year = date.getFullYear(); const startYear = date.getMonth() >= 3 ? year : year - 1; return `PSL | ${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)} | ${String(id ?? "").match(/^\d+$/) ? String(id).padStart(3, "0") : String(id ?? "-")}`; };
+
 function mapBill(bill, billRates = {}) {
   const grid = number(value(bill, "Unit"));
   const gridCharge = firstAmount(bill, "RateAmount", "Charge");
@@ -33,8 +35,8 @@ function mapBill(bill, billRates = {}) {
   const other = savedOther || Math.max(0, total - gridCharge - dgCharge - fixed - ctDtRent - arrears - interest);
   const chargesTotal = Math.max(0, total - arrears);
   return {
-    id: value(bill, "ID", "Id"), receipt: value(bill, "ReceiptID") || `BILL-${value(bill, "ID", "Id")}`,
-    flat: value(bill, "FlatID"), customer: value(bill, "CustomerName") || "-", address: value(bill, "CustomerAddress", "Address") || "Address not available", meter: value(bill, "MeterNumber", "MeeterNumber") || "-",
+    id: value(bill, "ID", "Id"), receipt: billDisplayNo(value(bill, "ReceiptID"), value(bill, "BillDate")),
+    flat: value(bill, "UnitNo", "FlatNo", "FlatID"), customer: value(bill, "CustomerName") || "-", address: value(bill, "CustomerAddress", "Address") || "Address not available", meter: value(bill, "MeterNumber", "MeeterNumber") || "-",
     grid, gridCharge, dg, dgCharge, fixed, fuelRate, fuelSearchCharge, dutyRate, ctDtRent, duty, arrears, interest, other, chargesTotal, total,
     status: String(value(bill, "Status") || "Pending").trim(), billDate: value(bill, "BillDate"), dueDate: value(bill, "DueDate"),
     fromDate: value(bill, "FromDate"), toDate: value(bill, "ToDate"), remarks: value(bill, "Remarks")
@@ -105,7 +107,7 @@ function createBillPdf(row) {
   // =========================
   const infoY = 58;
   const rowH = 13;
-  const addressRowH = 22;
+  const addressRowH = 27;
   const infoH = rowH * 2 + addressRowH;
   const c1 = 78, c2 = 58, c3 = width - c1 - c2;
   rect(left + 2, infoY, width - 4, infoH, null, border, 0.4);
@@ -141,9 +143,11 @@ function createBillPdf(row) {
   label("Bill Date:", ix + c1 + c2 + 3, infoY + rowH + 8.3);
   val(billDate, ix + c1 + c2 + 22, infoY + rowH + 8.3, c3 - 25);
 
-  label("Address:", ix + 3, infoY + rowH * 2 + 8.3);
+  label("Address:", ix + 3, infoY + rowH * 2 + 6.5);
   setFont(false, 8.6, text);
-  pdf.text(pdf.splitTextToSize(customerAddress, c1 - 25).slice(0, 4), ix + 22, infoY + rowH * 2 + 8.3, { lineHeightFactor: 1.15 });
+  pdf.text(pdf.splitTextToSize(customerAddress, c1 - 25).slice(0, 3), ix + 22, infoY + rowH * 2 + 6.5, { lineHeightFactor: 1.15 });
+  label("Flat No:", ix + 3, infoY + rowH * 2 + 22);
+  val(row.flat || "-", ix + 22, infoY + rowH * 2 + 22, c1 - 25);
   label("Bill Period:", ix + c1 + 3, infoY + rowH * 2 + 8.3);
   textFit(periodText, ix + c1 + 30, infoY + rowH * 2 + 8.3, c2 - 34, 7.8);
   label("Due Date:", ix + c1 + c2 + 3, infoY + rowH * 2 + 8.3);
@@ -198,7 +202,7 @@ function createBillPdf(row) {
   pdf.text(String(row.dg || 0), leftX + cw[0] + cw[1] + cw[2] / 2, consY + 33, { align: "center" });
   pdf.text(money(row.dgCharge), leftX + colW - 2, consY + 33, { align: "right" });
 
-  // LEFT: Energy charges
+  // LEFT: Energy charge slab rates
   const energyY = consY + consH + 4;
   sectionTitle(leftX, energyY, colW, "ENERGY CHARGES DETAIL");
   const rateY = energyY + 8;
@@ -208,13 +212,13 @@ function createBillPdf(row) {
   pdf.line(leftX + rateSplit, rateY, leftX + rateSplit, rateY + rateH);
   pdf.line(leftX, rateY + 6, leftX + colW, rateY + 6);
   setFont(true, 7.0, navy);
-  pdf.text("Description", leftX + 3, rateY + 4.3);
-  pdf.text("Rs./Unit", leftX + rateSplit + 5, rateY + 4.3);
+  pdf.text("Unit slab", leftX + 3, rateY + 4.3);
+  pdf.text("Rate", leftX + rateSplit + 5, rateY + 4.3);
   const tariffRows = [
-    ["0 - 50 units", "4.75 / unit"],
-    ["51 - 150 units", "6.00 / unit"],
-    ["151 - 500 units", "7.00 / unit"],
-    ["Above 500 units", "7.50 / unit"]
+    ["0 - 50 units", "Rs. 4.75 / unit"],
+    ["51 - 150 units", "Rs. 6.00 / unit"],
+    ["151 - 500 units", "Rs. 7.00 / unit"],
+    ["Above 500 units", "Rs. 7.50 / unit"]
   ];
   setFont(false, 6.9, text);
   tariffRows.forEach((item, idx) => {
@@ -355,6 +359,6 @@ function AdminBills() {
     const fileName = `powerpay-bill-${String(idValue).replace(/\s+/g, "-")}-${suffix}.pdf`;
     createBillPdf(row).save(fileName);
   };
-  return <div className="eb-admin-bills"><section className="eb-admin-table"><div className="eb-admin-table-head eb-admin-bills-head"><div><h2>Generated bills</h2><p>{bills.length} bill{bills.length === 1 ? "" : "s"} </p></div><div className="eb-admin-bill-tools"><button className="eb-btn eb-btn-light" type="button" onClick={loadBills} title="Refresh bills"><RefreshCw size={15} />Refresh</button><button className="eb-btn eb-btn-light" type="button" onClick={downloadExcel} disabled={!rows.length}><FileSpreadsheet size={15} />Excel</button><button className="eb-btn eb-btn-primary" type="button" onClick={printPdf} disabled={!rows.length}><Printer size={15} />PDF</button></div></div>{loading ? <div className="eb-admin-user-state">Loading bills...</div> : error ? <div className="eb-admin-user-state eb-admin-user-error">{error}</div> : rows.length ? <div className="eb-admin-user-table-wrap"><table className="eb-admin-user-table"><thead><tr><th>Bill ID</th><th>Flat</th><th>Customer</th><th>Meter</th><th>Units</th><th>Amount</th><th>Status</th><th>Bill date</th><th>PDF</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><span className="eb-admin-bill-id"><FileText size={14} />{row.id}</span></td><td>{row.flat}</td><td>{row.customer}</td><td>{row.meter}</td><td>{row.grid}</td><td>{money(row.total)}</td><td><span className="eb-admin-status">{row.status}</span></td><td>{dateText(row.billDate)}</td><td><span className="eb-admin-row-actions"><button className="eb-admin-row-pdf" type="button" onClick={() => printSingleBill(row)} title={`Print bill ${row.id}`}><Printer size={15} /></button><button className="eb-admin-row-pdf" type="button" onClick={() => downloadSingleBill(row)} title={`Download bill ${row.id} PDF`}><Download size={15} /></button></span></td></tr>)}</tbody></table></div> : <div className="eb-admin-user-state"><Download size={20} />No generated bills found.</div>}</section></div>;
+  return <div className="eb-admin-bills"><section className="eb-admin-table"><div className="eb-admin-table-head eb-admin-bills-head"><div><h2>Generated bills</h2><p>{bills.length} bill{bills.length === 1 ? "" : "s"} </p></div><div className="eb-admin-bill-tools"><button className="eb-btn eb-btn-light" type="button" onClick={loadBills} title="Refresh bills"><RefreshCw size={15} />Refresh</button><button className="eb-btn eb-btn-light" type="button" onClick={downloadExcel} disabled={!rows.length}><FileSpreadsheet size={15} />Excel</button><button className="eb-btn eb-btn-primary" type="button" onClick={printPdf} disabled={!rows.length}><Printer size={15} />PDF</button></div></div>{loading ? <div className="eb-admin-user-state">Loading bills...</div> : error ? <div className="eb-admin-user-state eb-admin-user-error">{error}</div> : rows.length ? <div className="eb-admin-user-table-wrap"><table className="eb-admin-user-table"><thead><tr><th>Bill ID</th><th>Flat</th><th>Customer</th><th>Meter</th><th>Units</th><th>Amount</th><th>Status</th><th>Bill date</th><th>PDF</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><span className="eb-admin-bill-id"><FileText size={14} />{String(row.id).padStart(3, "0")}</span></td><td>{row.flat}</td><td>{row.customer}</td><td>{row.meter}</td><td>{row.grid}</td><td>{money(row.total)}</td><td><span className="eb-admin-status">{row.status}</span></td><td>{dateText(row.billDate)}</td><td><span className="eb-admin-row-actions"><button className="eb-admin-row-pdf" type="button" onClick={() => printSingleBill(row)} title={`Print bill ${row.id}`}><Printer size={15} /></button><button className="eb-admin-row-pdf" type="button" onClick={() => downloadSingleBill(row)} title={`Download bill ${row.id} PDF`}><Download size={15} /></button></span></td></tr>)}</tbody></table></div> : <div className="eb-admin-user-state"><Download size={20} />No generated bills found.</div>}</section></div>;
 }
 export default AdminBills;
