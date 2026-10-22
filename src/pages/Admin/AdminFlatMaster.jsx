@@ -203,7 +203,7 @@ function AdminFlatMaster() {
     <section className="eb-admin-table">
       <div className="eb-admin-table-head"><div><h2>Assign flat to customer</h2><p>Create an assignment in AssignFlat with the selected customer and property details.</p></div><Building2 size={20} /></div>
       <form className="eb-master-form" onSubmit={handleSubmit}>
-        <label>Customer Name<div className="eb-master-customer-input"><input list="flat-master-customers" value={customerQuery} onChange={selectCustomer} placeholder="Type customer name or number" required /><button className="eb-master-inline-action" type="button" onClick={() => setCustomerDialogOpen(true)} title="Create new customer"><UserPlus size={16} /></button></div><datalist id="flat-master-customers">{customers.map((customer) => <option key={customer.CustomerID} value={customerLabel(customer)} />)}</datalist></label>
+        <label>Customer<div className="eb-master-customer-input"><input list="flat-master-customers" value={customerQuery} onChange={selectCustomer} placeholder="Type customer name or number" required /><button className="eb-master-inline-action" type="button" onClick={() => setCustomerDialogOpen(true)} title="Create new customer"><UserPlus size={16} /></button></div><datalist id="flat-master-customers">{customers.map((customer) => <option key={customer.CustomerID} value={customerLabel(customer)} />)}</datalist></label>
         <label>Customer address<input value={customerAddress} readOnly placeholder="Auto-filled from customer" /></label>
         <label>Mobile number<input value={customerMobile} readOnly placeholder="Auto-filled from customer" /></label>
         <label>Flat number<input value={form.unitNo} onChange={set("unitNo")} placeholder="A-001" required /></label>
