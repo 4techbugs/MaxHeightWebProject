@@ -118,7 +118,7 @@ function Login() {
         <div className="eb-login-art-inner">
           <div className="eb-art-logo"><Zap size={26} fill="currentColor" /><span>Power<span>Pay</span></span></div>
           <h2>Smart electricity billing,<br />simplified for every home.</h2>
-          <p>Generate wdsdewd accurate bills, track consumption, and manage payments — all from one clean dashboard built for consumers.</p>
+          <p>Generate accurate bills, track consumption, and manage payments — all from one clean dashboard built for consumers.</p>
           <div className="eb-art-stats">
             <div><strong>12k+</strong><span>Active meters</span></div>
             <div><strong>₹2.4Cr</strong><span>Bills processed</span></div>
