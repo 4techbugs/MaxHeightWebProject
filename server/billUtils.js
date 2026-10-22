@@ -75,7 +75,7 @@ export function normalizeBillPayload(payload = {}) {
     ModifiedTime: decodeDateValue(payload.ModifiedTime || new Date().toTimeString().slice(0, 8), new Date("1970-01-01T00:00:00")),
     Status: String(payload.status ?? payload.Status ?? "Pending").trim() || "Pending",
     ReceiptID: receiptId,
-    ChargeAmount: charge,
+    ChargeAmount: totalAmount,
     RateAmount: rateAmount,
     FuelSearchCharge: fuelSearchCharge,
     CTDTRent: ctDtRent,

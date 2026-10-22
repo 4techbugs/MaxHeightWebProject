@@ -694,7 +694,7 @@ app.post("/api/admin/payments", async (request, response) => {
     const quote = await getPaymentQuote(pool, flat, receiptDate);
     if (!quote) return response.status(400).json({ message: "Selected flat number was not found." });
     const selected = quote.selected;
-    const paymentAmount = quote.bill ? quote.totalAmount : amount;
+    const paymentAmount = amount;
     const paymentMode = String(request.body?.paymentMode || "").trim();
     const now = new Date();
     const result = await pool.request()

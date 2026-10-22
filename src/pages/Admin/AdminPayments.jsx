@@ -139,7 +139,12 @@ function AdminPayments({ listOnly = false }) {
       const data = await readResponse(response);
       if (!response.ok) throw new Error(data.message || "Unable to calculate payment amount.");
       setPaymentQuote(data);
-      if (data.bill) setForm((current) => ({ ...current, flat: selectedFlat, customerName: flat.customerName || "", amount: data.totalAmount.toFixed(2) }));
+      setForm((current) => ({
+        ...current,
+        flat: selectedFlat,
+        customerName: flat.customerName || "",
+        amount: data.bill ? data.totalAmount.toFixed(2) : "",
+      }));
     } catch (quoteError) { setPaymentQuote(null); setError(quoteError.message); }
   };
 
@@ -353,7 +358,7 @@ function AdminPayments({ listOnly = false }) {
         <label>Cheque / reference no.<input value={form.chequeNo} onChange={update("chequeNo")} placeholder="Reference number" /></label>
         <label>Cheque date<input type="date" value={form.chequeDate} onChange={update("chequeDate")} /></label>
         <label>Receipt date<input type="date" value={form.receiptDate} onChange={update("receiptDate")} required /></label>
-        <label>Amount{paymentQuote?.bill && <small>Includes 18% yearly late penalty after due date</small>}<input type="number" min="0.01" step="0.01" value={form.amount} onChange={update("amount")} placeholder="e.g. 4366" readOnly={Boolean(paymentQuote?.bill)} required /></label>
+        <label>Amount{paymentQuote?.bill && <small>Suggested payable incl. late penalty; you can enter the amount received</small>}<input type="number" min="0.01" step="0.01" value={form.amount} onChange={update("amount")} placeholder="Enter amount received" required /></label>
         <button className="eb-btn eb-btn-primary eb-payment-submit" type="submit" disabled={saving}><Plus size={16} />{saving ? "Saving..." : editingId ? "Update payment" : "Submit"}</button>
       </form>
       {message && <div className="eb-admin-user-message eb-admin-user-success"><CheckCircle2 size={15} />{message}</div>}
