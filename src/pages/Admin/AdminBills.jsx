@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Download, FileSpreadsheet, FileText, Printer, RefreshCw } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, Printer, RefreshCw, Search } from "lucide-react";
 import { jsPDF } from "jspdf";
 
+const BILLING_ADDRESS = "Max Heiights Majestic, GH-III, Suncity Township, Village Nindar, Grand Sikar Road, Jaipur-302013";
 const value = (bill, ...keys) => keys.map((key) => bill[key]).find((item) => item !== undefined && item !== null) ?? "";
 const number = (input) => Number(input) || 0;
 const firstAmount = (bill, ...keys) => {
@@ -34,11 +35,12 @@ function mapBill(bill, billRates = {}) {
   // Older records stored only the final total. Keep the printed charge rows reconciled.
   const other = savedOther || Math.max(0, total - gridCharge - dgCharge - fixed - ctDtRent - arrears - interest);
   const chargesTotal = Math.max(0, total - arrears);
+  const billDate = value(bill, "BillDate");
   return {
-    id: value(bill, "ID", "Id"), receipt: billDisplayNo(value(bill, "ReceiptID"), value(bill, "BillDate")),
-    flat: value(bill, "UnitNo", "FlatNo", "FlatID"), customer: value(bill, "CustomerName") || "-", address: value(bill, "CustomerAddress", "Address") || "Address not available", meter: value(bill, "MeterNumber", "MeeterNumber") || "-",
+    id: value(bill, "ID", "Id"), receipt: billDisplayNo(value(bill, "ReceiptID") || value(bill, "ID", "Id"), billDate),
+    flat: value(bill, "UnitNo", "FlatNo", "FlatID"), customer: value(bill, "CustomerName") || "-", address: `${value(bill, "UnitNo", "FlatNo", "FlatID") || "-"}, ${BILLING_ADDRESS}`, meter: value(bill, "MeterNumber", "MeeterNumber") || "-",
     grid, gridCharge, dg, dgCharge, fixed, fuelRate, fuelSearchCharge, dutyRate, ctDtRent, duty, arrears, interest, other, chargesTotal, total,
-    status: String(value(bill, "Status") || "Pending").trim(), billDate: value(bill, "BillDate"), dueDate: value(bill, "DueDate"),
+    status: String(value(bill, "Status") || "Pending").trim(), billDate, dueDate: value(bill, "DueDate"),
     fromDate: value(bill, "FromDate"), toDate: value(bill, "ToDate"), remarks: value(bill, "Remarks")
   };
 }
@@ -309,8 +311,8 @@ function createBillPdf(row) {
   // =========================
   // IMPORTANT NOTES - COMPACT, BILL-COMPATIBLE STYLE
   // =========================
-  const importantNotesY = payNoteY + 7;
-  const notesH = 48;
+  const importantNotesY = payNoteY + 4;
+  const notesH = 43;
   rect(left + 2, importantNotesY, mainW, notesH, veryLightBlue, border, 0.45);
 
   // Notes header uses the same light-blue style as the other bill sections.
@@ -334,9 +336,9 @@ function createBillPdf(row) {
     "* The Electricity supply is purely for residential purpose only."
   ];
 
-  setFont(false, 6.25, [40, 50, 62]);
+  setFont(false, 6.0, [40, 50, 62]);
   noteLines.forEach((line, index) => {
-    const y = importantNotesY + 11 + index * 3.65;
+    const y = importantNotesY + 10 + index * 3.2;
     const wrapped = pdf.splitTextToSize(line, mainW - 8);
     // Keep the notes within the fixed box and A4 frame.
     pdf.text(wrapped[0] || line, left + 4, y);
@@ -346,12 +348,14 @@ function createBillPdf(row) {
 }
 
 function AdminBills() {
-  const [bills, setBills] = useState([]); const [billRates, setBillRates] = useState({}); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
+  const [bills, setBills] = useState([]); const [billRates, setBillRates] = useState({}); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [search, setSearch] = useState("");
   const loadBills = async () => { setLoading(true); setError(""); try { const [billsResponse, ratesResponse] = await Promise.all([fetch("/api/bills"), fetch("/api/bill-rates")]); const data = await billsResponse.json(); if (!billsResponse.ok) throw new Error(data.message || "Unable to load bills."); setBills(data); if (ratesResponse.ok) setBillRates(await ratesResponse.json()); } catch (loadError) { setError(loadError.message); } finally { setLoading(false); } };
   useEffect(() => { loadBills(); }, []);
   const rows = bills.map((bill) => mapBill(bill, billRates));
-  const downloadExcel = () => { const headers = ["Bill ID", "Flat ID", "Customer Name", "Meter Number", "Units", "Amount", "Status", "Bill Date"]; const csv = "\ufeff" + [headers, ...rows.map((row) => [row.id, row.flat, row.customer, row.meter, row.grid, row.total, row.status, dateText(row.billDate)])].map((items) => items.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(",")).join("\r\n"); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = `powerpay-bills-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url); };
-  const printPdf = () => { const printWindow = window.open("", "_blank", "width=1100,height=800"); if (!printWindow) return; const body = rows.map((row) => `<tr><td>${escapeHtml(row.id)}</td><td>${escapeHtml(row.flat)}</td><td>${escapeHtml(row.customer)}</td><td>${escapeHtml(row.meter)}</td><td>${row.grid}</td><td>${money(row.total)}</td><td>${escapeHtml(row.status)}</td><td>${dateText(row.billDate)}</td></tr>`).join(""); printWindow.document.write(`<html><head><title>PowerPay Bills</title><style>body{font-family:Arial;color:#17233b;padding:24px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{padding:9px;border:1px solid #d9e1ec;text-align:left}th{background:#edf4ff}@media print{body{padding:0}}</style></head><body><h1>PowerPay Bill Report</h1><p>Generated on ${new Date().toLocaleString("en-IN")}</p><table><thead><tr><th>Bill ID</th><th>Flat</th><th>Customer</th><th>Meter</th><th>Units</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>${body}</tbody></table><script>window.onload=()=>window.print()</script></body></html>`); printWindow.document.close(); };
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredRows = normalizedSearch ? rows.filter((row) => [row.receipt, row.flat, String(row.total), money(row.total)].some((item) => String(item).toLowerCase().includes(normalizedSearch))) : rows;
+  const downloadExcel = () => { const headers = ["Bill No", "Flat No", "Customer Name", "Meter Number", "Units", "Amount", "Status", "Bill Date"]; const csv = "\ufeff" + [headers, ...filteredRows.map((row) => [row.receipt, row.flat, row.customer, row.meter, row.grid, row.total, row.status, dateText(row.billDate)])].map((items) => items.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(",")).join("\r\n"); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = `powerpay-bills-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url); };
+  const printPdf = () => { const printWindow = window.open("", "_blank", "width=1100,height=800"); if (!printWindow) return; const body = filteredRows.map((row) => `<tr><td>${escapeHtml(row.receipt)}</td><td>${escapeHtml(row.flat)}</td><td>${escapeHtml(row.customer)}</td><td>${escapeHtml(row.meter)}</td><td>${row.grid}</td><td>${money(row.total)}</td><td>${escapeHtml(row.status)}</td><td>${dateText(row.billDate)}</td></tr>`).join(""); printWindow.document.write(`<html><head><title>PowerPay Bills</title><style>body{font-family:Arial;color:#17233b;padding:24px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{padding:9px;border:1px solid #d9e1ec;text-align:left}th{background:#edf4ff}@media print{body{padding:0}}</style></head><body><h1>PowerPay Bill Report</h1><p>Generated on ${new Date().toLocaleString("en-IN")}</p><table><thead><tr><th>Bill No</th><th>Flat No</th><th>Customer</th><th>Meter</th><th>Units</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>${body}</tbody></table><script>window.onload=()=>window.print()</script></body></html>`); printWindow.document.close(); };
   const printSingleBill = (row) => { const url = createBillPdf(row).output("bloburl"); const printWindow = window.open(url, "_blank"); if (printWindow) printWindow.onload = () => printWindow.print(); };
   const downloadSingleBill = (row) => {
     const suffix = Date.now();
@@ -359,6 +363,6 @@ function AdminBills() {
     const fileName = `powerpay-bill-${String(idValue).replace(/\s+/g, "-")}-${suffix}.pdf`;
     createBillPdf(row).save(fileName);
   };
-  return <div className="eb-admin-bills"><section className="eb-admin-table"><div className="eb-admin-table-head eb-admin-bills-head"><div><h2>Generated bills</h2><p>{bills.length} bill{bills.length === 1 ? "" : "s"} </p></div><div className="eb-admin-bill-tools"><button className="eb-btn eb-btn-light" type="button" onClick={loadBills} title="Refresh bills"><RefreshCw size={15} />Refresh</button><button className="eb-btn eb-btn-light" type="button" onClick={downloadExcel} disabled={!rows.length}><FileSpreadsheet size={15} />Excel</button><button className="eb-btn eb-btn-primary" type="button" onClick={printPdf} disabled={!rows.length}><Printer size={15} />PDF</button></div></div>{loading ? <div className="eb-admin-user-state">Loading bills...</div> : error ? <div className="eb-admin-user-state eb-admin-user-error">{error}</div> : rows.length ? <div className="eb-admin-user-table-wrap"><table className="eb-admin-user-table"><thead><tr><th>Bill ID</th><th>Flat</th><th>Customer</th><th>Meter</th><th>Units</th><th>Amount</th><th>Status</th><th>Bill date</th><th>PDF</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><span className="eb-admin-bill-id"><FileText size={14} />{String(row.id).padStart(3, "0")}</span></td><td>{row.flat}</td><td>{row.customer}</td><td>{row.meter}</td><td>{row.grid}</td><td>{money(row.total)}</td><td><span className="eb-admin-status">{row.status}</span></td><td>{dateText(row.billDate)}</td><td><span className="eb-admin-row-actions"><button className="eb-admin-row-pdf" type="button" onClick={() => printSingleBill(row)} title={`Print bill ${row.id}`}><Printer size={15} /></button><button className="eb-admin-row-pdf" type="button" onClick={() => downloadSingleBill(row)} title={`Download bill ${row.id} PDF`}><Download size={15} /></button></span></td></tr>)}</tbody></table></div> : <div className="eb-admin-user-state"><Download size={20} />No generated bills found.</div>}</section></div>;
+  return <div className="eb-admin-bills"><section className="eb-admin-table"><div className="eb-admin-table-head eb-admin-bills-head"><div><h2>Generated bills</h2><p>{bills.length} bill{bills.length === 1 ? "" : "s"} </p></div><div className="eb-admin-bill-tools"><label className="eb-admin-bill-search"><Search size={15} /><input type="search" aria-label="Search bills by bill number, flat number, or amount" placeholder="Search bill no, flat no, amount..." value={search} onChange={(event) => setSearch(event.target.value)} /></label><button className="eb-btn eb-btn-light" type="button" onClick={loadBills} title="Refresh bills"><RefreshCw size={15} />Refresh</button><button className="eb-btn eb-btn-light" type="button" onClick={downloadExcel} disabled={!filteredRows.length}><FileSpreadsheet size={15} />Excel</button><button className="eb-btn eb-btn-primary" type="button" onClick={printPdf} disabled={!filteredRows.length}><Printer size={15} />PDF</button></div></div>{loading ? <div className="eb-admin-user-state">Loading bills...</div> : error ? <div className="eb-admin-user-state eb-admin-user-error">{error}</div> : filteredRows.length ? <div className="eb-admin-user-table-wrap"><table className="eb-admin-user-table"><thead><tr><th>Bill No</th><th>Flat No</th><th>Customer</th><th>Meter</th><th>Units</th><th>Amount</th><th>Status</th><th>Bill date</th><th>PDF</th></tr></thead><tbody>{filteredRows.map((row) => <tr key={row.id}><td><span className="eb-admin-bill-id"><FileText size={14} />{row.receipt}</span></td><td>{row.flat}</td><td>{row.customer}</td><td>{row.meter}</td><td>{row.grid}</td><td>{money(row.total)}</td><td><span className="eb-admin-status">{row.status}</span></td><td>{dateText(row.billDate)}</td><td><span className="eb-admin-row-actions"><button className="eb-admin-row-pdf" type="button" onClick={() => printSingleBill(row)} title={`Print bill ${row.receipt}`}><Printer size={15} /></button><button className="eb-admin-row-pdf" type="button" onClick={() => downloadSingleBill(row)} title={`Download bill ${row.receipt} PDF`}><Download size={15} /></button></span></td></tr>)}</tbody></table></div> : <div className="eb-admin-user-state"><Download size={20} />{normalizedSearch ? "No bills match your search." : "No generated bills found."}</div>}</section></div>;
 }
 export default AdminBills;

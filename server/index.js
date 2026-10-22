@@ -1045,17 +1045,17 @@ app.get("/api/assigned-flats", async (request, response) => {
           customer_details.[ContactNo] AS [phone],
           bill_details.[MeterNumber] AS [meter],
           bill_details.[Load] AS [load],
-          COALESCE(balance_details.[Amount], 0) AS [previousBalance],
+          outstanding_details.[Amount] AS [previousBalance],
           CASE
             WHEN COALESCE(penalty_details.[PenaltyAmount], 0) > 0
             THEN COALESCE(penalty_details.[PenaltyAmount], 0)
             WHEN COALESCE(bill_details.[penalty], 0) > 0
               AND LTRIM(RTRIM(COALESCE(bill_details.[Status], ''))) <> 'Paid'
             THEN COALESCE(bill_details.[penalty], 0)
-            WHEN COALESCE(balance_details.[Amount], 0) > 0
+            WHEN COALESCE(outstanding_details.[Amount], 0) > 0
               AND bill_details.[DueDate] < CAST(GETDATE() AS DATE)
               AND LTRIM(RTRIM(COALESCE(bill_details.[Status], ''))) <> 'Paid'
-            THEN ROUND(COALESCE(balance_details.[Amount], 0) * 0.18 * DATEDIFF(DAY, bill_details.[DueDate], CAST(GETDATE() AS DATE)) / 365.0, 2)
+            THEN ROUND(COALESCE(outstanding_details.[Amount], 0) * 0.18 * DATEDIFF(DAY, bill_details.[DueDate], CAST(GETDATE() AS DATE)) / 365.0, 2)
             ELSE 0
           END AS [previousPenalty]
         FROM [dbo].[AssignFlat]
@@ -1064,17 +1064,66 @@ app.get("/api/assigned-flats", async (request, response) => {
         OUTER APPLY (
           SELECT TOP (1)
             COALESCE(NULLIF([MeterNumber], ''), [MeeterNumber]) AS [MeterNumber],
-            [Load], [PreviousBalance], [PriviousBalance], [DueDate], [Status], [penalty]
+            [Load], [DueDate], [Status], [penalty]
           FROM [dbo].[tb_ElectricBill]
           WHERE [FlatID] = [AssignFlat].[AssignFlatID]
           ORDER BY [Id] DESC
         ) AS bill_details
+        OUTER APPLY (
+          SELECT
+            COUNT(*) AS [BillCount],
+            SUM(CASE
+              WHEN COALESCE([TotalPaidAmount], 0) > 0
+              THEN [TotalPaidAmount] - COALESCE([PreviousBalance], 0)
+              ELSE COALESCE(NULLIF([RateAmount], 0), NULLIF([ChargeAmount], 0), [Charge], 0)
+                + COALESCE([DGAmount], 0)
+                + COALESCE([FuelSearchCharge], 0)
+                + COALESCE([CTDTRent], 0)
+                + COALESCE([DutyCharge], 0)
+                + COALESCE(NULLIF([FixedCharge], 0), [MiscCharge], 0)
+                + COALESCE([OtherCharge], 0)
+                + COALESCE([penalty], 0)
+                - COALESCE([Discount], 0)
+            END) AS [BilledCharges]
+          FROM [dbo].[tb_ElectricBill]
+          WHERE [FlatID] = [AssignFlat].[AssignFlatID]
+        ) AS bill_balance
+        OUTER APPLY (
+          SELECT TOP (1)
+            COALESCE([PreviousBalance], 0) AS [OpeningBalance],
+            [BillDate] AS [OpeningBillDate]
+          FROM [dbo].[tb_ElectricBill]
+          WHERE [FlatID] = [AssignFlat].[AssignFlatID]
+          ORDER BY [BillDate], [ID]
+        ) AS first_bill
+        OUTER APPLY (
+          SELECT SUM(COALESCE([Amount], 0)) AS [PaidAmount]
+          FROM [dbo].[tb_Payment]
+          WHERE TRY_CONVERT(INT, [FlatID]) = [AssignFlat].[AssignFlatID]
+            AND LTRIM(RTRIM(COALESCE([Status], ''))) = 'Active'
+            AND [ReceiptDate] >= first_bill.[OpeningBillDate]
+        ) AS payment_balance
         OUTER APPLY (
           SELECT TOP (1) [Amount]
           FROM [dbo].[Tb_Electricity_priviousBalance]
           WHERE [FlatID] = [AssignFlat].[AssignFlatID]
           ORDER BY [Id] DESC
         ) AS balance_details
+        OUTER APPLY (
+          SELECT CASE
+            WHEN bill_balance.[BillCount] > 0 THEN
+              CASE
+                WHEN COALESCE(first_bill.[OpeningBalance], 0)
+                  + COALESCE(bill_balance.[BilledCharges], 0)
+                  - COALESCE(payment_balance.[PaidAmount], 0) > 0
+                THEN COALESCE(first_bill.[OpeningBalance], 0)
+                  + COALESCE(bill_balance.[BilledCharges], 0)
+                  - COALESCE(payment_balance.[PaidAmount], 0)
+                ELSE 0
+              END
+            ELSE COALESCE(balance_details.[Amount], 0)
+          END AS [Amount]
+        ) AS outstanding_details
         OUTER APPLY (
           SELECT TOP (1) [PenaltyAmount]
           FROM [dbo].[tb_ElectricityPenalty]
@@ -1503,7 +1552,7 @@ app.get("/api/admin/ledger", async (_request, response) => {
   try {
     await ensurePenaltyTable();
     const pool = await getDbPool();
-    const result = await pool.request().query(`
+    const accountResult = await pool.request().query(`
       WITH bill_totals AS (
         SELECT
           [FlatID],
@@ -1547,7 +1596,47 @@ app.get("/api/admin/ledger", async (_request, response) => {
       LEFT JOIN penalty_totals penalties ON TRY_CONVERT(INT, penalties.[FlatID]) = TRY_CONVERT(INT, bills.[FlatID])
       ORDER BY bills.[LastBillDate] DESC, bills.[FlatID]
     `);
-    return response.json(result.recordset);
+    const [billResult, paymentResult] = await Promise.all([
+      pool.request().query(`
+        SELECT
+          bill.[ID], bill.[FlatID], bill.[CustomerID],
+          COALESCE(CONVERT(NVARCHAR(50), af.[UnitNo]), CONVERT(NVARCHAR(50), bill.[FlatID])) AS [UnitNo],
+          COALESCE(NULLIF(bill.[CustomerName], ''), customer_details.[CustomerName]) AS [CustomerName],
+          bill.[MeterNumber], bill.[ReceiptID], bill.[BillDate], bill.[DueDate],
+          bill.[FromDate], bill.[ToDate], bill.[Unit], bill.[RateAmount],
+          bill.[Charge], bill.[ChargeAmount], bill.[TotalPaidAmount],
+          bill.[DGUnit], bill.[DGCharge],
+          bill.[DGAmount], bill.[PreviousBalance], bill.[penalty] AS [BillPenalty],
+          bill.[Discount], bill.[FuelSearchCharge], bill.[CTDTRent], bill.[DutyCharge],
+          bill.[FixedCharge], bill.[OtherCharge], bill.[Load], bill.[Address],
+          bill.[Remarks], bill.[Status]
+        FROM [dbo].[tb_ElectricBill] bill
+        LEFT JOIN [dbo].[AssignFlat] af
+          ON CONVERT(NVARCHAR(50), af.[AssignFlatID]) = CONVERT(NVARCHAR(50), bill.[FlatID])
+        LEFT JOIN [dbo].[Customer] customer_details
+          ON LTRIM(RTRIM(CONVERT(NVARCHAR(50), customer_details.[CustomerID]))) = LTRIM(RTRIM(CONVERT(NVARCHAR(50), bill.[CustomerID])))
+        ORDER BY bill.[BillDate] DESC, bill.[ID] DESC
+      `),
+      pool.request().query(`
+        SELECT
+          p.[ID], p.[FlatID], p.[CustomerID],
+          COALESCE(CONVERT(NVARCHAR(50), af.[UnitNo]), CONVERT(NVARCHAR(50), p.[FlatID])) AS [UnitNo],
+          COALESCE(p.[CustomerName], customer_details.[CustomerName]) AS [CustomerName],
+          p.[ReceiptDate], p.[Amount], p.[PaymentMode], p.[Bank], p.[Branch],
+          p.[ChequeNo], p.[ChequeDate]
+        FROM [dbo].[tb_Payment] p
+        LEFT JOIN [dbo].[AssignFlat] af
+          ON CONVERT(NVARCHAR(50), af.[AssignFlatID]) = CONVERT(NVARCHAR(50), p.[FlatID])
+        LEFT JOIN [dbo].[Customer] customer_details ON customer_details.[CustomerID] = p.[CustomerID]
+        WHERE LTRIM(RTRIM(COALESCE(p.[Status], ''))) = 'Active'
+        ORDER BY p.[ReceiptDate] DESC, p.[ID] DESC
+      `),
+    ]);
+    return response.json({
+      accounts: accountResult.recordset,
+      bills: billResult.recordset,
+      payments: paymentResult.recordset,
+    });
   } catch (error) {
     console.error("Ledger fetch failed:", error.message);
     return response.status(503).json({ message: "Unable to load ledger right now." });

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, BookOpenText, Building2, CreditCard, FilePenLine, FileText, Gauge, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, Users, X, FilePlus2, List } from "lucide-react";
+import { BookOpenText, Building2, CreditCard, FilePenLine, FileText, Gauge, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, Users, X, FilePlus2, List } from "lucide-react";
 import Navbar from "../../components/Navbar/Navbar.jsx";
 import AdminGenerateBill from "./AdminGenerateBill.jsx";
 import AdminUsers from "./AdminUsers.jsx";
@@ -24,7 +24,6 @@ const tabs = [
   { label: "Payments", to: "/admin/payments", icon: CreditCard },
   { label: "Payment List", to: "/admin/payment-list", icon: List },
   { label: "Ledger", to: "/admin/ledger", icon: BookOpenText },
-  { label: "Reports", to: "/admin/reports", icon: BarChart3 },
   { label: "Settings", to: "/admin/settings", icon: Settings },
 ];
 
@@ -62,7 +61,7 @@ function AdminDashboard() {
       </aside>
       <main className="eb-admin-content">
         <div className="eb-admin-mobilebar"><button onClick={() => setOpen(true)} aria-label="Open menu"><Menu size={20} /></button><strong>Admin panel</strong></div>
-        <Navbar title={activeContent.title} onMenu={() => setOpen(true)} />
+        <Navbar title={activeContent.title} onMenu={() => setOpen(true)} hideSearch={location.pathname === "/admin/ledger"} />
         <div className="eb-admin-page">
           <div className="eb-admin-heading"><div><span className="eb-admin-eyebrow">ADMINISTRATION</span><h1>{activeContent.title}</h1><p>{activeContent.description}</p></div><div className="eb-admin-heading-mark"><Gauge size={21} /><span>Live workspace</span></div></div>
           {location.pathname === "/admin" ? <AdminOverview /> : location.pathname === "/admin/users" ? <AdminUsers /> : location.pathname === "/admin/flat-master" ? <AdminFlatMaster /> : location.pathname === "/admin/bills" ? <AdminBills /> : location.pathname === "/admin/edit-bills" ? <AdminEditBill /> : location.pathname === "/admin/payments" ? <AdminPayments /> : location.pathname === "/admin/payment-list" ? <AdminPayments listOnly /> : location.pathname === "/admin/ledger" ? <AdminLedger /> : location.pathname === "/admin/reports" ? <AdminReports /> : location.pathname === "/admin/generate-bill" ? <AdminGenerateBill /> : location.pathname === "/admin/settings" ? <AdminChargeMasters /> : <div className="eb-admin-empty"><div><Settings size={25} /></div><h2>{activeContent.title} is ready</h2><p>This admin tab is connected to the workspace. Add the matching table query here when you are ready to load live records.</p></div>}

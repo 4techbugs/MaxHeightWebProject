@@ -29,6 +29,7 @@ function calcGrid(units) {
 }
 
 const empty = { flat: "", unitNo: "", meter: "", grid: "", gd: "", arrears: "", penalty: "", other: "", remarks: "" };
+const billingAddress = "Max Heiights Majestic, GH-III, Suncity Township, Village Nindar, Grand Sikar Road, Jaipur-302013";
 
 function GenerateBill() {
   const navigate = useNavigate();
@@ -132,7 +133,7 @@ function GenerateBill() {
   const customerName = activeProfile ? activeProfile.customerName : (form.flat ? "Customer Walk-in" : "Customer Name");
   const unitNo = activeProfile ? (activeProfile.unitNo || form.unitNo || form.flat || "-") : (form.unitNo || form.flat || "-");
   const meterNo = form.meter || activeProfile?.meter || "-";
-  const billAddress = activeProfile ? (activeProfile.address || "Address not available") : "Address not available";
+  const billAddress = `${unitNo}, ${billingAddress}`;
   const billContact = activeProfile ? (activeProfile.phone || "-") : "-";
   const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
   const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
