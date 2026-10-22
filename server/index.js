@@ -224,6 +224,76 @@ async function getPaymentQuote(pool, flat, paymentDate = new Date()) {
   };
 }
 
+async function applyCalculatedArrears(pool, flatId, billDate, payload, excludedBillId = null) {
+  const result = await pool.request()
+    .input("flatId", sql.Int, Number(flatId))
+    .input("billDate", sql.DateTime, billDate)
+    .input("excludedBillId", sql.Int, excludedBillId)
+    .query(`
+      WITH prior_bills AS (
+        SELECT [BillDate], [ID], [PreviousBalance], [TotalPaidAmount], [RateAmount], [ChargeAmount],
+          [Charge], [DGAmount], [FuelSearchCharge], [CTDTRent], [DutyCharge], [FixedCharge],
+          [MiscCharge], [OtherCharge], [penalty], [Discount]
+        FROM [dbo].[tb_ElectricBill]
+        WHERE TRY_CONVERT(INT, [FlatID]) = @flatId
+          AND [BillDate] < @billDate
+          AND (@excludedBillId IS NULL OR [ID] <> @excludedBillId)
+      ),
+      prior_totals AS (
+        SELECT
+          COUNT(*) AS [BillCount],
+          SUM(CASE
+            WHEN COALESCE([TotalPaidAmount], 0) > 0
+            THEN [TotalPaidAmount] - COALESCE([PreviousBalance], 0)
+            ELSE COALESCE(NULLIF([RateAmount], 0), NULLIF([ChargeAmount], 0), [Charge], 0)
+              + COALESCE([DGAmount], 0)
+              + COALESCE([FuelSearchCharge], 0)
+              + COALESCE([CTDTRent], 0)
+              + COALESCE([DutyCharge], 0)
+              + COALESCE(NULLIF([FixedCharge], 0), [MiscCharge], 0)
+              + COALESCE([OtherCharge], 0)
+              + COALESCE([penalty], 0)
+              - COALESCE([Discount], 0)
+          END) AS [BilledCharges]
+        FROM prior_bills
+      )
+      SELECT
+        prior_totals.[BillCount],
+        COALESCE(prior_totals.[BilledCharges], 0) AS [BilledCharges],
+        COALESCE(opening_bill.[OpeningBalance], 0) AS [OpeningBalance],
+        COALESCE(payment_totals.[PaidAmount], 0) AS [PaidAmount]
+      FROM prior_totals
+      OUTER APPLY (
+        SELECT TOP (1)
+          COALESCE([PreviousBalance], 0) AS [OpeningBalance],
+          [BillDate] AS [OpeningBillDate]
+        FROM prior_bills
+        ORDER BY [BillDate], [ID]
+      ) AS opening_bill
+      OUTER APPLY (
+        SELECT SUM(COALESCE([Amount], 0)) AS [PaidAmount]
+        FROM [dbo].[tb_Payment]
+        WHERE TRY_CONVERT(INT, [FlatID]) = @flatId
+          AND LTRIM(RTRIM(COALESCE([Status], ''))) = 'Active'
+          AND [ReceiptDate] >= opening_bill.[OpeningBillDate]
+          AND [ReceiptDate] < DATEADD(DAY, 1, @billDate)
+      ) AS payment_totals
+    `);
+  const priorBalance = result.recordset[0];
+  if (Number(priorBalance?.BillCount) > 0) {
+    const calculatedArrears = Math.max(0, Math.round((
+      Number(priorBalance.OpeningBalance || 0)
+      + Number(priorBalance.BilledCharges || 0)
+      - Number(priorBalance.PaidAmount || 0)
+    ) * 100) / 100);
+    const arrearsDifference = Math.round((calculatedArrears - Number(payload.PreviousBalance || 0)) * 100) / 100;
+    payload.PreviousBalance = calculatedArrears;
+    payload.PriviousBalance = calculatedArrears;
+    payload.ChargeAmount = Math.round((Number(payload.ChargeAmount || 0) + arrearsDifference) * 100) / 100;
+    payload.TotalPaidAmount = Math.round((Number(payload.TotalPaidAmount || 0) + arrearsDifference) * 100) / 100;
+  }
+}
+
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 
@@ -1032,11 +1102,21 @@ app.delete("/api/admin/charge-masters/:id", async (request, response) => {
 // displayed flat number from dbo.AssignFlat (for example, A-1204).
 app.get("/api/assigned-flats", async (request, response) => {
   const search = String(request.query.search || "").trim();
+  const billDate = String(request.query.billDate || "").trim();
+  const dateParts = billDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const checkedBillDate = dateParts ? new Date(Date.UTC(Number(dateParts[1]), Number(dateParts[2]) - 1, Number(dateParts[3]))) : null;
+  if (billDate && (!dateParts
+    || checkedBillDate.getUTCFullYear() !== Number(dateParts[1])
+    || checkedBillDate.getUTCMonth() + 1 !== Number(dateParts[2])
+    || checkedBillDate.getUTCDate() !== Number(dateParts[3]))) {
+    return response.status(400).json({ message: "A valid bill date is required." });
+  }
 
   try {
     const pool = await getDbPool();
     const result = await pool.request()
       .input("search", sql.NVarChar(50), `%${search}%`)
+      .input("billDate", sql.DateTime, billDate ? new Date(`${billDate}T00:00:00`) : null)
       .query(`
         SELECT DISTINCT
           [AssignFlat].[AssignFlatID], [AssignFlat].[CustomerID], [AssignFlat].[UnitNo],
@@ -1046,6 +1126,7 @@ app.get("/api/assigned-flats", async (request, response) => {
           bill_details.[MeterNumber] AS [meter],
           bill_details.[Load] AS [load],
           outstanding_details.[Amount] AS [previousBalance],
+          bill_balance.[BillCount] AS [billCount],
           CASE
             WHEN COALESCE(penalty_details.[PenaltyAmount], 0) > 0
             THEN COALESCE(penalty_details.[PenaltyAmount], 0)
@@ -1067,14 +1148,15 @@ app.get("/api/assigned-flats", async (request, response) => {
             [Load], [DueDate], [Status], [penalty]
           FROM [dbo].[tb_ElectricBill]
           WHERE [FlatID] = [AssignFlat].[AssignFlatID]
-          ORDER BY [Id] DESC
+              AND (@billDate IS NULL OR [BillDate] < @billDate)
+            ORDER BY [Id] DESC
         ) AS bill_details
         OUTER APPLY (
-          SELECT
-            COUNT(*) AS [BillCount],
-            SUM(CASE
-              WHEN COALESCE([TotalPaidAmount], 0) > 0
-              THEN [TotalPaidAmount] - COALESCE([PreviousBalance], 0)
+            SELECT
+              COUNT(*) AS [BillCount],
+              SUM(CASE
+                WHEN COALESCE([TotalPaidAmount], 0) > 0
+                THEN [TotalPaidAmount] - COALESCE([PreviousBalance], 0)
               ELSE COALESCE(NULLIF([RateAmount], 0), NULLIF([ChargeAmount], 0), [Charge], 0)
                 + COALESCE([DGAmount], 0)
                 + COALESCE([FuelSearchCharge], 0)
@@ -1087,6 +1169,7 @@ app.get("/api/assigned-flats", async (request, response) => {
             END) AS [BilledCharges]
           FROM [dbo].[tb_ElectricBill]
           WHERE [FlatID] = [AssignFlat].[AssignFlatID]
+            AND (@billDate IS NULL OR [BillDate] < @billDate)
         ) AS bill_balance
         OUTER APPLY (
           SELECT TOP (1)
@@ -1094,7 +1177,8 @@ app.get("/api/assigned-flats", async (request, response) => {
             [BillDate] AS [OpeningBillDate]
           FROM [dbo].[tb_ElectricBill]
           WHERE [FlatID] = [AssignFlat].[AssignFlatID]
-          ORDER BY [BillDate], [ID]
+              AND (@billDate IS NULL OR [BillDate] < @billDate)
+            ORDER BY [BillDate], [ID]
         ) AS first_bill
         OUTER APPLY (
           SELECT SUM(COALESCE([Amount], 0)) AS [PaidAmount]
@@ -1102,6 +1186,7 @@ app.get("/api/assigned-flats", async (request, response) => {
           WHERE TRY_CONVERT(INT, [FlatID]) = [AssignFlat].[AssignFlatID]
             AND LTRIM(RTRIM(COALESCE([Status], ''))) = 'Active'
             AND [ReceiptDate] >= first_bill.[OpeningBillDate]
+            AND (@billDate IS NULL OR [ReceiptDate] < DATEADD(DAY, 1, @billDate))
         ) AS payment_balance
         OUTER APPLY (
           SELECT TOP (1) [Amount]
@@ -1364,6 +1449,7 @@ app.post("/api/bills", async (request, response) => {
       databaseFlatId = assignedFlat.recordset[0].AssignFlatID;
       databaseCustomerId = assignedFlat.recordset[0].CustomerID || databaseCustomerId;
     }
+    await applyCalculatedArrears(pool, databaseFlatId, payload.BillDate, payload);
     const existingColumns = await pool.request().query(`
       SELECT c.name AS column_name, ty.name AS data_type
       FROM sys.columns c
@@ -1478,6 +1564,11 @@ app.put("/api/bills/:id", async (request, response) => {
   try {
     await ensureElectricBillTable();
     const pool = await getDbPool();
+    const existingBill = await pool.request()
+      .input("id", sql.Int, id)
+      .query("SELECT TOP (1) [FlatID] FROM [dbo].[tb_ElectricBill] WHERE [ID] = @id");
+    if (!existingBill.recordset.length) return response.status(404).json({ message: "Bill not found." });
+    await applyCalculatedArrears(pool, existingBill.recordset[0].FlatID, payload.BillDate, payload, id);
     const result = await pool.request()
       .input("id", sql.Int, id)
       .input("BillDate", sql.Date, payload.BillDate)

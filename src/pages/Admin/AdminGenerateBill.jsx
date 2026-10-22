@@ -343,17 +343,21 @@ function AdminGenerateBill() {
 
       const savedRows = monthlyRows.filter((row) => row.saved);
 
-      const flatNumbers = [...new Set(parsedRows.map((row) => row.flat).filter(Boolean))];
-      const matchedFlats = new Map(await Promise.all(flatNumbers.map(async (flatNumber) => {
-        const response = await fetch(`/api/assigned-flats?search=${encodeURIComponent(flatNumber)}`);
+      const flatLookups = [...new Map(parsedRows
+        .filter((row) => row.flat)
+        .map((row) => [`${row.flat.toLowerCase()}|${row.billDate}`, { flatNumber: row.flat, billDate: row.billDate }])).values()];
+      const matchedFlats = new Map(await Promise.all(flatLookups.map(async ({ flatNumber, billDate }) => {
+        const query = new URLSearchParams({ search: flatNumber });
+        if (billDate) query.set("billDate", billDate);
+        const response = await fetch(`/api/assigned-flats?${query}`);
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || "Unable to match spreadsheet flats.");
         const match = data.find((item) => String(item.UnitNo || "").trim().toLowerCase() === flatNumber.toLowerCase());
-        return [flatNumber.toLowerCase(), match || null];
+        return [`${flatNumber.toLowerCase()}|${billDate}`, match || null];
       })));
 
       const importedRows = parsedRows.map((row) => {
-        const flatRecord = matchedFlats.get(row.flat.toLowerCase());
+        const flatRecord = matchedFlats.get(`${row.flat.toLowerCase()}|${row.billDate}`);
         if (!flatRecord) return row;
         return {
           ...row,
@@ -364,7 +368,9 @@ function AdminGenerateBill() {
           meter: row.meter || getFlatField(flatRecord, "meter", "MeterNumber", "MeeterNumber"),
           load: row.load || getFlatField(flatRecord, "load", "Load"),
           address: getFlatField(flatRecord, "address", "Address"),
-          arrears: columns.arrears >= 0 ? row.arrears : String(getFlatField(flatRecord, "previousBalance", "PreviousBalance", "PriviousBalance") || 0),
+          arrears: Number(flatRecord.billCount) > 0 || columns.arrears < 0
+            ? String(getFlatField(flatRecord, "previousBalance", "PreviousBalance", "PriviousBalance") || 0)
+            : row.arrears,
           penalty: columns.penalty >= 0 ? row.penalty : String(getFlatField(flatRecord, "previousPenalty", "PreviousPenalty") || 0),
         };
       });
