@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowUpRight, CalendarDays, CreditCard, FilePlus2, FileText, Gauge, IndianRupee, ReceiptIndianRupee, Wallet } from "lucide-react";
+import { ArrowUpRight, CalendarDays, CreditCard, FileText, Gauge, IndianRupee, ReceiptIndianRupee, Wallet } from "lucide-react";
 import Navbar from "../../components/Navbar/Navbar.jsx";
 import Sidebar from "../../components/Sidebar/Sidebar.jsx";
 import StatCard from "../../components/StatCard/StatCard.jsx";
@@ -82,7 +82,6 @@ function Dashboard() {
             <div><h1>Welcome back{account?.client?.name ? `, ${account.client.name}` : ""}</h1><p>Here's a snapshot of your electricity account and usage.</p></div>
             <div className="eb-heading-actions">
               <Link to="/bill-history" className="eb-btn eb-btn-light"><FileText size={16} />Bill History</Link>
-              <Link to="/generate-bill" className="eb-btn eb-btn-primary"><FilePlus2 size={16} />Generate Bill</Link>
             </div>
           </div>
 
@@ -118,7 +117,6 @@ function Dashboard() {
                 <div className="eb-dash-quick">
                   <h3>Quick Actions</h3>
                   <div className="eb-dash-quick-grid">
-                    <Link to="/generate-bill" className="eb-dash-quick-btn"><FilePlus2 size={17} /><span>Generate Bill</span></Link>
                     <Link to="/bill-history" className="eb-dash-quick-btn"><FileText size={17} /><span>Bill History</span></Link>
                     <Link to="/payment-history" className="eb-dash-quick-btn"><CreditCard size={17} /><span>Payment History</span></Link>
                     <Link to={currentBill ? `/bill-details/${currentBill.ID}` : "/bill-history"} className="eb-dash-quick-btn"><ReceiptIndianRupee size={17} /><span>Current Bill</span></Link>
