@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, FileSpreadsheet, FileText, Printer, RefreshCw, Search } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, FileType, Printer, RefreshCw, Search, X } from "lucide-react";
 import { jsPDF } from "jspdf";
 
 const BILLING_ADDRESS = "Max Heiights Majestic, GH-III, Suncity Township, Village Nindar, Grand Sikar Road, Jaipur-302013";
@@ -13,6 +13,30 @@ const money = (input) => `Rs. ${number(input).toLocaleString("en-IN", { minimumF
 const dateText = (input) => input ? new Date(input).toLocaleDateString("en-IN") : "-";
 const shortDateText = (input) => input ? new Date(input).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "-";
 const escapeHtml = (input) => String(input ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+const requestSaveLocation = (fileName, mimeType, extension, description) => {
+  if (typeof window.showSaveFilePicker !== "function") return Promise.resolve(null);
+  return window.showSaveFilePicker({
+    suggestedName: fileName,
+    types: [{ description, accept: { [mimeType]: [extension] } }],
+  });
+};
+const saveExportFile = async (blob, fileName, mimeType, extension, description, fileHandle = null) => {
+  if (!fileHandle && typeof window.showSaveFilePicker === "function") {
+    fileHandle = await requestSaveLocation(fileName, mimeType, extension, description);
+  }
+  if (fileHandle) {
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
 
 const billDisplayNo = (id, billDate) => { const date = billDate ? new Date(billDate) : new Date(); const year = date.getFullYear(); const startYear = date.getMonth() >= 3 ? year : year - 1; return `PSL | ${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)} | ${String(id ?? "").match(/^\d+$/) ? String(id).padStart(3, "0") : String(id ?? "-")}`; };
 
@@ -151,7 +175,7 @@ function createBillPdf(row) {
   label("Flat No:", ix + 3, infoY + rowH * 2 + 22);
   val(row.flat || "-", ix + 22, infoY + rowH * 2 + 22, c1 - 25);
   label("Bill Period:", ix + c1 + 3, infoY + rowH * 2 + 8.3);
-  textFit(periodText, ix + c1 + 30, infoY + rowH * 2 + 8.3, c2 - 34, 7.8);
+  textFit(periodText, ix + c1 + 25, infoY + rowH * 2 + 8.3, c2 - 28, 7.8);
   label("Due Date:", ix + c1 + c2 + 3, infoY + rowH * 2 + 8.3);
   val(dueDate, ix + c1 + c2 + 22, infoY + rowH * 2 + 8.3, c3 - 25);
 
@@ -349,20 +373,112 @@ function createBillPdf(row) {
 
 function AdminBills() {
   const [bills, setBills] = useState([]); const [billRates, setBillRates] = useState({}); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [search, setSearch] = useState("");
+  const [previewRow, setPreviewRow] = useState(null); const [previewUrl, setPreviewUrl] = useState(""); const [exportError, setExportError] = useState("");
   const loadBills = async () => { setLoading(true); setError(""); try { const [billsResponse, ratesResponse] = await Promise.all([fetch("/api/bills"), fetch("/api/bill-rates")]); const data = await billsResponse.json(); if (!billsResponse.ok) throw new Error(data.message || "Unable to load bills."); setBills(data); if (ratesResponse.ok) setBillRates(await ratesResponse.json()); } catch (loadError) { setError(loadError.message); } finally { setLoading(false); } };
   useEffect(() => { loadBills(); }, []);
+  useEffect(() => {
+    if (!previewUrl) return undefined;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+  useEffect(() => {
+    if (!previewRow) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") {
+        setPreviewRow(null);
+        setPreviewUrl("");
+        setExportError("");
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [previewRow]);
   const rows = bills.map((bill) => mapBill(bill, billRates));
   const normalizedSearch = search.trim().toLowerCase();
   const filteredRows = normalizedSearch ? rows.filter((row) => [row.receipt, row.flat, String(row.total), money(row.total)].some((item) => String(item).toLowerCase().includes(normalizedSearch))) : rows;
   const downloadExcel = () => { const headers = ["Bill No", "Flat No", "Customer Name", "Meter Number", "Units", "Amount", "Status", "Bill Date"]; const csv = "\ufeff" + [headers, ...filteredRows.map((row) => [row.receipt, row.flat, row.customer, row.meter, row.grid, row.total, row.status, dateText(row.billDate)])].map((items) => items.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(",")).join("\r\n"); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = `powerpay-bills-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url); };
   const printPdf = () => { const printWindow = window.open("", "_blank", "width=1100,height=800"); if (!printWindow) return; const body = filteredRows.map((row) => `<tr><td>${escapeHtml(row.receipt)}</td><td>${escapeHtml(row.flat)}</td><td>${escapeHtml(row.customer)}</td><td>${escapeHtml(row.meter)}</td><td>${row.grid}</td><td>${money(row.total)}</td><td>${escapeHtml(row.status)}</td><td>${dateText(row.billDate)}</td></tr>`).join(""); printWindow.document.write(`<html><head><title>PowerPay Bills</title><style>body{font-family:Arial;color:#17233b;padding:24px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{padding:9px;border:1px solid #d9e1ec;text-align:left}th{background:#edf4ff}@media print{body{padding:0}}</style></head><body><h1>PowerPay Bill Report</h1><p>Generated on ${new Date().toLocaleString("en-IN")}</p><table><thead><tr><th>Bill No</th><th>Flat No</th><th>Customer</th><th>Meter</th><th>Units</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>${body}</tbody></table><script>window.onload=()=>window.print()</script></body></html>`); printWindow.document.close(); };
   const printSingleBill = (row) => { const url = createBillPdf(row).output("bloburl"); const printWindow = window.open(url, "_blank"); if (printWindow) printWindow.onload = () => printWindow.print(); };
-  const downloadSingleBill = (row) => {
-    const suffix = Date.now();
-    const idValue = row.receipt || row.id || "bill";
-    const fileName = `powerpay-bill-${String(idValue).replace(/\s+/g, "-")}-${suffix}.pdf`;
-    createBillPdf(row).save(fileName);
+  const fileNameForBill = (row, extension) => `powerpay-bill-${String(row.receipt || row.id || "bill").replace(/[<>:"/\\|?*\s]+/g, "-")}.${extension}`;
+  const openBillPreview = (row) => {
+    setExportError("");
+    try {
+      setPreviewUrl(URL.createObjectURL(createBillPdf(row).output("blob")));
+      setPreviewRow(row);
+    } catch (previewError) {
+      setExportError(previewError.message || "Unable to preview this bill.");
+    }
   };
-  return <div className="eb-admin-bills"><section className="eb-admin-table"><div className="eb-admin-table-head eb-admin-bills-head"><div><h2>Generated bills</h2><p>{bills.length} bill{bills.length === 1 ? "" : "s"} </p></div><div className="eb-admin-bill-tools"><label className="eb-admin-bill-search"><Search size={15} /><input type="search" aria-label="Search bills by bill number, flat number, or amount" placeholder="Search bill no, flat no, amount..." value={search} onChange={(event) => setSearch(event.target.value)} /></label><button className="eb-btn eb-btn-light" type="button" onClick={loadBills} title="Refresh bills"><RefreshCw size={15} />Refresh</button><button className="eb-btn eb-btn-light" type="button" onClick={downloadExcel} disabled={!filteredRows.length}><FileSpreadsheet size={15} />Excel</button><button className="eb-btn eb-btn-primary" type="button" onClick={printPdf} disabled={!filteredRows.length}><Printer size={15} />PDF</button></div></div>{loading ? <div className="eb-admin-user-state">Loading bills...</div> : error ? <div className="eb-admin-user-state eb-admin-user-error">{error}</div> : filteredRows.length ? <div className="eb-admin-user-table-wrap"><table className="eb-admin-user-table"><thead><tr><th>Bill No</th><th>Flat No</th><th>Customer</th><th>Meter</th><th>Units</th><th>Amount</th><th>Status</th><th>Bill date</th><th>PDF</th></tr></thead><tbody>{filteredRows.map((row) => <tr key={row.id}><td><span className="eb-admin-bill-id"><FileText size={14} />{row.receipt}</span></td><td>{row.flat}</td><td>{row.customer}</td><td>{row.meter}</td><td>{row.grid}</td><td>{money(row.total)}</td><td><span className="eb-admin-status">{row.status}</span></td><td>{dateText(row.billDate)}</td><td><span className="eb-admin-row-actions"><button className="eb-admin-row-pdf" type="button" onClick={() => printSingleBill(row)} title={`Print bill ${row.receipt}`}><Printer size={15} /></button><button className="eb-admin-row-pdf" type="button" onClick={() => downloadSingleBill(row)} title={`Download bill ${row.receipt} PDF`}><Download size={15} /></button></span></td></tr>)}</tbody></table></div> : <div className="eb-admin-user-state"><Download size={20} />{normalizedSearch ? "No bills match your search." : "No generated bills found."}</div>}</section></div>;
+  const closeBillPreview = () => {
+    setPreviewRow(null);
+    setPreviewUrl("");
+    setExportError("");
+  };
+  const downloadBillPdf = async () => {
+    try {
+      const fileName = fileNameForBill(previewRow, "pdf");
+      const blob = createBillPdf(previewRow).output("blob");
+      await saveExportFile(blob, fileName, "application/pdf", ".pdf", "PDF document");
+      setExportError("");
+    } catch (downloadError) {
+      if (downloadError.name !== "AbortError") setExportError(downloadError.message || "Unable to export this bill to PDF.");
+    }
+  };
+  const downloadBillExcel = async () => {
+    try {
+      const fileName = fileNameForBill(previewRow, "xlsx");
+      const mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      const saveHandle = await requestSaveLocation(fileName, mimeType, ".xlsx", "Excel workbook");
+      const spreadsheet = await import("@e965/xlsx");
+      const sheet = spreadsheet.utils.aoa_to_sheet([
+        ["Bill No", "Flat No", "Customer Name", "Address", "Meter Number", "From Date", "To Date", "Bill Date", "Due Date", "Units", "Electricity Charges", "DG Units", "DG Charges", "Fixed Charges", "Fuel Surcharge", "CT/PT Rent", "Electricity Duty", "Arrears", "Interest", "Other Charges", "Total Amount", "Status"],
+        [previewRow.receipt, previewRow.flat, previewRow.customer, previewRow.address, previewRow.meter, dateText(previewRow.fromDate), dateText(previewRow.toDate), dateText(previewRow.billDate), dateText(previewRow.dueDate), previewRow.grid, previewRow.gridCharge, previewRow.dg, previewRow.dgCharge, previewRow.fixed, previewRow.fuelSearchCharge, previewRow.ctDtRent, previewRow.duty, previewRow.arrears, previewRow.interest, previewRow.other, previewRow.total, previewRow.status],
+      ]);
+      const workbook = spreadsheet.utils.book_new();
+      spreadsheet.utils.book_append_sheet(workbook, sheet, "Bill");
+      const fileData = spreadsheet.write(workbook, { bookType: "xlsx", type: "array" });
+      await saveExportFile(new Blob([fileData], { type: mimeType }), fileName, mimeType, ".xlsx", "Excel workbook", saveHandle);
+      setExportError("");
+    } catch (downloadError) {
+      if (downloadError.name !== "AbortError") setExportError(downloadError.message || "Unable to export this bill to Excel.");
+    }
+  };
+  const downloadBillWord = async () => {
+    try {
+      const fields = [
+        ["Bill No", previewRow.receipt], ["Flat No", previewRow.flat], ["Customer Name", previewRow.customer],
+        ["Address", previewRow.address], ["Meter Number", previewRow.meter], ["From Date", dateText(previewRow.fromDate)],
+        ["To Date", dateText(previewRow.toDate)], ["Bill Date", dateText(previewRow.billDate)], ["Due Date", dateText(previewRow.dueDate)],
+        ["Units", previewRow.grid], ["Electricity Charges", money(previewRow.gridCharge)], ["DG Charges", money(previewRow.dgCharge)],
+        ["Fixed Charges", money(previewRow.fixed)], ["Fuel Surcharge", money(previewRow.fuelSearchCharge)], ["CT/PT Rent", money(previewRow.ctDtRent)],
+        ["Electricity Duty", money(previewRow.duty)], ["Arrears", money(previewRow.arrears)], ["Interest", money(previewRow.interest)],
+        ["Other Charges", money(previewRow.other)], ["Total Amount", money(previewRow.total)], ["Status", previewRow.status],
+      ];
+      const tableRows = fields.map(([label, fieldValue]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(fieldValue)}</td></tr>`).join("");
+      const documentHtml = `<html><head><meta charset="utf-8"><title>${escapeHtml(previewRow.receipt)}</title></head><body><h1>Electricity Bill</h1><table border="1" cellspacing="0" cellpadding="6">${tableRows}</table></body></html>`;
+      const mimeType = "application/msword";
+      await saveExportFile(new Blob([documentHtml], { type: `${mimeType};charset=utf-8` }), fileNameForBill(previewRow, "doc"), mimeType, ".doc", "Word document");
+      setExportError("");
+    } catch (downloadError) {
+      if (downloadError.name !== "AbortError") setExportError(downloadError.message || "Unable to export this bill to Word.");
+    }
+  };
+  return <div className="eb-admin-bills"><section className="eb-admin-table"><div className="eb-admin-table-head eb-admin-bills-head"><div><h2>Generated bills</h2><p>{bills.length} bill{bills.length === 1 ? "" : "s"} </p></div><div className="eb-admin-bill-tools"><label className="eb-admin-bill-search"><Search size={15} /><input type="search" aria-label="Search bills by bill number, flat number, or amount" placeholder="Search bill no, flat no, amount..." value={search} onChange={(event) => setSearch(event.target.value)} /></label><button className="eb-btn eb-btn-light" type="button" onClick={loadBills} title="Refresh bills"><RefreshCw size={15} />Refresh</button><button className="eb-btn eb-btn-light" type="button" onClick={downloadExcel} disabled={!filteredRows.length}><FileSpreadsheet size={15} />Excel</button><button className="eb-btn eb-btn-primary" type="button" onClick={printPdf} disabled={!filteredRows.length}><Printer size={15} />PDF</button></div></div>{loading ? <div className="eb-admin-user-state">Loading bills...</div> : error ? <div className="eb-admin-user-state eb-admin-user-error">{error}</div> : filteredRows.length ? <div className="eb-admin-user-table-wrap"><table className="eb-admin-user-table"><thead><tr><th>Bill No</th><th>Flat No</th><th>Customer</th><th>Meter</th><th>Units</th><th>Amount</th><th>Status</th><th>Bill date</th><th>PDF</th></tr></thead><tbody>{filteredRows.map((row) => <tr key={row.id}><td><span className="eb-admin-bill-id"><FileText size={14} />{row.receipt}</span></td><td>{row.flat}</td><td>{row.customer}</td><td>{row.meter}</td><td>{row.grid}</td><td>{money(row.total)}</td><td><span className="eb-admin-status">{row.status}</span></td><td>{dateText(row.billDate)}</td><td><span className="eb-admin-row-actions"><button className="eb-admin-row-pdf" type="button" onClick={() => printSingleBill(row)} title={`Print bill ${row.receipt}`}><Printer size={15} /></button><button className="eb-admin-row-pdf" type="button" onClick={() => openBillPreview(row)} title={`Preview and export bill ${row.receipt}`}><Download size={15} /></button></span></td></tr>)}</tbody></table></div> : <div className="eb-admin-user-state"><Download size={20} />{normalizedSearch ? "No bills match your search." : "No generated bills found."}</div>}</section>
+    {previewRow && <div className="eb-bill-preview-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeBillPreview(); }}>
+      <section className="eb-bill-preview" role="dialog" aria-modal="true" aria-labelledby="eb-bill-preview-title">
+        <header className="eb-bill-preview-toolbar">
+          <div><h2 id="eb-bill-preview-title">Bill preview</h2><p>{previewRow.receipt}</p></div>
+          <div className="eb-bill-preview-actions">
+            <button className="eb-btn eb-btn-light" type="button" onClick={downloadBillPdf}><FileText size={15} />PDF</button>
+            <button className="eb-btn eb-btn-light" type="button" onClick={downloadBillExcel}><FileSpreadsheet size={15} />Excel</button>
+            <button className="eb-btn eb-btn-light" type="button" onClick={downloadBillWord}><FileType size={15} />Word</button>
+            <button className="eb-btn eb-btn-primary" type="button" onClick={() => { const printWindow = window.open(previewUrl, "_blank"); if (printWindow) printWindow.onload = () => printWindow.print(); }}><Printer size={15} />Print</button>
+            <button className="eb-bill-preview-close" type="button" onClick={closeBillPreview} aria-label="Close bill preview"><X size={19} /></button>
+          </div>
+        </header>
+        {exportError && <div className="eb-bill-preview-error" role="alert">{exportError}</div>}
+        <iframe className="eb-bill-preview-frame" title={`Preview of bill ${previewRow.receipt}`} src={previewUrl} />
+      </section>
+    </div>}
+  </div>;
 }
 export default AdminBills;
