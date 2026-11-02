@@ -38,7 +38,7 @@ const saveExportFile = async (blob, fileName, mimeType, extension, description, 
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-const billDisplayNo = (id, billDate) => { const date = billDate ? new Date(billDate) : new Date(); const year = date.getFullYear(); const startYear = date.getMonth() >= 3 ? year : year - 1; return `PSL | ${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)} | ${String(id ?? "").match(/^\d+$/) ? String(id).padStart(3, "0") : String(id ?? "-")}`; };
+const billDisplayNo = (id, billDate) => { const date = billDate ? new Date(billDate) : new Date(); const year = date.getFullYear(); const startYear = date.getMonth() >= 3 ? year : year - 1; return `PSL | ${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)} | ${String(id ?? "").match(/^\d+$/) ? String(id) : String(id ?? "-")}`; };
 
 function mapBill(bill, billRates = {}) {
   const grid = number(value(bill, "Unit"));

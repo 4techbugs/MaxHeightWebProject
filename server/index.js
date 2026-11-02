@@ -1414,6 +1414,7 @@ app.post("/api/bills", async (request, response) => {
     return response.status(400).json({ message: "Meter number and flat number are required." });
   }
 
+  let billTransaction = null;
   try {
     await ensureElectricBillTable();
     const pool = await getDbPool();
@@ -1425,13 +1426,6 @@ app.post("/api/bills", async (request, response) => {
       IF NOT EXISTS (SELECT 1 FROM [dbo].[tb_BillReceiptCounter] WITH (UPDLOCK, HOLDLOCK) WHERE [CounterID] = 1)
         INSERT INTO [dbo].[tb_BillReceiptCounter] ([CounterID], [NextValue]) VALUES (1, 1);
     `);
-    const receiptNumberResult = await pool.request().query(`
-      UPDATE [dbo].[tb_BillReceiptCounter] WITH (UPDLOCK, ROWLOCK)
-      SET [NextValue] = [NextValue] + 1
-      OUTPUT DELETED.[NextValue] AS [ReceiptNumber]
-      WHERE [CounterID] = 1;
-    `);
-    const receiptNumber = String(receiptNumberResult.recordset[0].ReceiptNumber).padStart(3, "0");
     let databaseFlatId = payload.FlatID;
     let databaseCustomerId = payload.CustomerID;
     if (!/^\d+$/.test(String(payload.FlatID))) {
@@ -1464,6 +1458,32 @@ app.post("/api/bills", async (request, response) => {
       if (!Number.isFinite(parsed)) return fallback;
       return parsed > 2147483646 ? (parsed % 2147483646) + 1 : parsed;
     };
+
+    billTransaction = new sql.Transaction(pool);
+    await billTransaction.begin();
+    const receiptNumberResult = await billTransaction.request().query(`
+      DECLARE @lockResult int;
+      EXEC @lockResult = sys.sp_getapplock
+        @Resource = N'tb_ElectricBill_ReceiptID',
+        @LockMode = 'Exclusive',
+        @LockOwner = 'Transaction',
+        @LockTimeout = 10000;
+      IF @lockResult < 0
+      BEGIN
+        ;THROW 50001, 'Unable to lock receipt number sequence.', 1;
+      END;
+
+      UPDATE [dbo].[tb_BillReceiptCounter]
+      SET [NextValue] = 1
+      WHERE [CounterID] = 1
+        AND NOT EXISTS (SELECT 1 FROM [dbo].[tb_ElectricBill]);
+
+      UPDATE [dbo].[tb_BillReceiptCounter] WITH (UPDLOCK, ROWLOCK)
+      SET [NextValue] = [NextValue] + 1
+      OUTPUT DELETED.[NextValue] AS [ReceiptNumber]
+      WHERE [CounterID] = 1;
+    `);
+    const receiptNumber = String(receiptNumberResult.recordset[0].ReceiptNumber);
 
     const insertMap = {
       FlatID: databaseFlatId,
@@ -1517,7 +1537,7 @@ app.post("/api/bills", async (request, response) => {
       )
     `;
 
-    const requestBuilder = pool.request();
+    const requestBuilder = billTransaction.request();
     for (const column of insertColumns) {
       const value = insertMap[column];
       if (column.includes("Date") || column.includes("Time")) {
@@ -1533,6 +1553,8 @@ app.post("/api/bills", async (request, response) => {
     }
 
     const result = await requestBuilder.query(insertQuery);
+    await billTransaction.commit();
+    billTransaction = null;
     const savedBill = result.recordset[0];
     const balanceAmount = Number(payload.TotalPaidAmount || payload.ChargeAmount || 0);
     const balanceRow = await pool.request()
@@ -1551,6 +1573,13 @@ app.post("/api/bills", async (request, response) => {
     }
     return response.status(201).json({ message: "Bill saved successfully.", bill: savedBill });
   } catch (error) {
+    if (billTransaction) {
+      try {
+        await billTransaction.rollback();
+      } catch (rollbackError) {
+        console.error("Bill transaction rollback failed:", rollbackError.message);
+      }
+    }
     console.error("Bill save failed:", error.message);
     return response.status(503).json({ message: "Unable to save the bill right now." });
   }
