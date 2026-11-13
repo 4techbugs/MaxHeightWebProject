@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Building2, Download, Plus, RefreshCw, Search, UserPlus, Upload, X } from "lucide-react";
+import { Building2, Download, Pencil, Plus, RefreshCw, Search, UserPlus, Upload, X } from "lucide-react";
 
 const initialForm = { customerId: "", unitNo: "", flatDetailId: "", floorNo: "", blockId: "", flatAmount: "", additionalAmount: "", arrears: "", bookingDate: new Date().toISOString().slice(0, 10), status: "Active" };
 const money = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateText = (value) => value ? new Date(value).toLocaleDateString("en-IN") : "-";
+const dateInputValue = (value) => value ? String(value).slice(0, 10) : "";
 const statusText = (value) => String(value || "Active").trim() || "Active";
 const getPageNumbers = (currentPage, totalPages) => {
   if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -14,7 +15,7 @@ const getPageNumbers = (currentPage, totalPages) => {
 
 async function readApiResponse(response, fallbackMessage) {
   if (!response.headers.get("content-type")?.includes("application/json")) {
-    if (response.status === 404) throw new Error("The API server does not have the Excel upload route yet. Restart the API server, then try again.");
+    if (response.status === 404) throw new Error("The requested API route was not found. Restart the API server, then try again.");
     throw new Error(`The API returned an unexpected response (HTTP ${response.status}).`);
   }
   const data = await response.json();
@@ -35,6 +36,7 @@ function AdminFlatMaster() {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editingFlatId, setEditingFlatId] = useState(null);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [processingWorkbook, setProcessingWorkbook] = useState(false);
@@ -81,6 +83,32 @@ function AdminFlatMaster() {
   const selectedDetail = flatDetails.find((detail) => String(detail.FlatDetailID) === String(form.flatDetailId));
   const customerLabel = (customer) => `${customer.CustomerName || "Unnamed"} · ${customer.CustomerNo || customer.CustomerID}`;
   const detailLabel = (detail) => `Block ${detail.BlockID} · Floor ${detail.FloorNo} · ${detail.FlatTypeName || "Flat type"}${detail.FlatView ? ` · ${detail.FlatView}` : ""}`;
+  const clearAssignmentForm = () => {
+    setForm(initialForm); setEditingFlatId(null); setCustomerQuery(""); setFlatDetailQuery(""); setCustomerAddress(""); setCustomerMobile("");
+  };
+  const editFlat = (flat) => {
+    const customer = customers.find((item) => String(item.CustomerID) === String(flat.CustomerID));
+    const detail = flatDetails.find((item) => String(item.FlatDetailID) === String(flat.FlatDetailID));
+    setEditingFlatId(flat.AssignFlatID);
+    setForm({
+      customerId: String(flat.CustomerID || ""),
+      unitNo: flat.UnitNo || "",
+      flatDetailId: String(flat.FlatDetailID || ""),
+      floorNo: String(flat.AssignedFloorNo ?? flat.FloorNo ?? ""),
+      blockId: String(flat.BlockID ?? ""),
+      flatAmount: String(flat.FlatAmount ?? ""),
+      additionalAmount: String(flat.AdditionalAmount ?? ""),
+      arrears: String(flat.arrears ?? ""),
+      bookingDate: dateInputValue(flat.BookingDate),
+      status: statusText(flat.FlatStatus),
+    });
+    setCustomerQuery(customer ? customerLabel(customer) : `${flat.CustomerName || "Unnamed"} · ${flat.CustomerNo || flat.CustomerID || ""}`);
+    setCustomerAddress(flat.Address || "");
+    setCustomerMobile(flat.Mobile || flat.ContactNo || "");
+    setFlatDetailQuery(detail ? detailLabel(detail) : `Block ${flat.BlockID ?? "-"} · Floor ${flat.FloorNo ?? "-"} · ${flat.FlatTypeName || "Flat type"}${flat.FlatView ? ` · ${flat.FlatView}` : ""}`);
+    setMessage(""); setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
   const findCustomer = (query) => {
     const normalizedQuery = String(query || "").trim().toLowerCase();
     return customers.find((customer) => [customerLabel(customer), customer.CustomerName, customer.CustomerNo, customer.CustomerID]
@@ -104,9 +132,16 @@ function AdminFlatMaster() {
   const handleSubmit = async (event) => {
     event.preventDefault(); setSaving(true); setMessage(""); setError("");
     try {
-      const response = await fetch("/api/admin/flat-master", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-      const data = await readApiResponse(response, "Unable to assign flat.");
-      setForm(initialForm); setCustomerQuery(""); setFlatDetailQuery(""); setCustomerAddress(""); setCustomerMobile(""); setMessage("Flat assigned to customer successfully."); await loadFlats(search);
+      const response = await fetch(editingFlatId ? `/api/admin/flat-master/${editingFlatId}` : "/api/admin/flat-master", {
+        method: editingFlatId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      await readApiResponse(response, editingFlatId ? "Unable to update flat." : "Unable to assign flat.");
+      const wasEditing = Boolean(editingFlatId);
+      clearAssignmentForm();
+      setMessage(wasEditing ? "Flat updated successfully." : "Flat assigned to customer successfully.");
+      await loadFlats(search);
     } catch (saveError) { setError(saveError.message); } finally { setSaving(false); }
   };
 
@@ -201,7 +236,7 @@ function AdminFlatMaster() {
 
   return <div className="eb-admin-users">
     <section className="eb-admin-table">
-      <div className="eb-admin-table-head"><div><h2>Assign flat to customer</h2><p>Create an assignment in AssignFlat with the selected customer and property details.</p></div><Building2 size={20} /></div>
+      <div className="eb-admin-table-head"><div><h2>{editingFlatId ? "Edit flat assignment" : "Assign flat to customer"}</h2><p>{editingFlatId ? "Update the selected flat's customer and property details." : "Create an assignment in AssignFlat with the selected customer and property details."}</p></div><Building2 size={20} /></div>
       <form className="eb-master-form" onSubmit={handleSubmit}>
         <label>Customer<div className="eb-master-customer-input"><input list="flat-master-customers" value={customerQuery} onChange={selectCustomer} placeholder="Type customer name or number" required /><button className="eb-master-inline-action" type="button" onClick={() => setCustomerDialogOpen(true)} title="Create new customer"><UserPlus size={16} /></button></div><datalist id="flat-master-customers">{customers.map((customer) => <option key={customer.CustomerID} value={customerLabel(customer)} />)}</datalist></label>
         <label>Customer address<input value={customerAddress} readOnly placeholder="Auto-filled from customer" /></label>
@@ -215,7 +250,7 @@ function AdminFlatMaster() {
         <label>Arrears<input type="number" min="0" step="0.01" value={form.arrears} onChange={set("arrears")} placeholder="0.00" /></label>
         <label>Booking date<input type="date" value={form.bookingDate} onChange={set("bookingDate")} required /></label>
         <label>Status<select value={form.status} onChange={set("status")}><option>Active</option><option>Booked</option><option>Transferred</option><option>Inactive</option></select></label>
-        <div><button className="eb-btn eb-btn-primary" type="submit" disabled={saving}><Plus size={16} />{saving ? "Saving..." : "Assign flat"}</button></div>
+        <div className="eb-flat-form-actions"><button className="eb-btn eb-btn-primary" type="submit" disabled={saving}><Plus size={16} />{saving ? "Saving..." : editingFlatId ? "Save changes" : "Assign flat"}</button>{editingFlatId && <button className="eb-btn eb-btn-light" type="button" onClick={clearAssignmentForm} disabled={saving}>Cancel</button>}</div>
       </form>
       {selectedDetail && <div className="eb-admin-user-message">Type: {selectedDetail.FlatTypeName || "-"} · Area: {selectedDetail.Area || "-"} · View: {selectedDetail.FlatView || "-"}</div>}
       {message && <div className="eb-admin-user-message eb-admin-user-success">{message}</div>}{error && <div className="eb-admin-user-message eb-admin-user-error">{error}</div>}
@@ -225,7 +260,7 @@ function AdminFlatMaster() {
       <div className="eb-admin-table-head"><div><h2>Assigned flats</h2><p>{flats.length} flat record{flats.length === 1 ? "" : "s"}</p></div><div className="eb-flat-arrears-actions"><input ref={workbookInput} type="file" accept=".xlsx" onChange={importArrearsWorkbook} hidden /><button className="eb-btn eb-btn-light" type="button" onClick={exportArrearsWorkbook} disabled={processingWorkbook}><Download size={15} />Download Excel</button><button className="eb-btn eb-btn-light" type="button" onClick={() => workbookInput.current?.click()} disabled={processingWorkbook}><Upload size={15} />Upload Excel</button><button className="eb-admin-refresh" type="button" onClick={() => loadFlats()} title="Refresh flat master"><RefreshCw size={17} /></button></div></div>
       {workbookMessage && <div className="eb-admin-user-message eb-admin-user-success">{workbookMessage}</div>}{workbookError && <div className="eb-admin-user-message eb-admin-user-error">{workbookError}</div>}
       <div className="eb-admin-ledger-filters"><label className="eb-admin-ledger-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search flat, customer or customer number" /></label></div>
-      {loading ? <div className="eb-admin-user-state">Loading flat master...</div> : error && !flats.length ? <div className="eb-admin-user-state eb-admin-user-error">{error}</div> : flats.length ? <><div className="eb-admin-user-table-wrap"><table className="eb-admin-user-table"><thead><tr><th>Flat no.</th><th>Customer</th><th>Flat type</th><th>Area</th><th>Floor / block</th><th>View</th><th>Flat amount</th><th>Additional</th><th>Arrears</th><th>Booking date</th><th>Status</th></tr></thead><tbody>{visibleFlats.map((flat) => <tr key={flat.AssignFlatID}><td><strong>{flat.UnitNo || "-"}</strong><small>ID {flat.AssignFlatID}</small></td><td><strong>{flat.CustomerName || "-"}</strong><small>{flat.CustomerNo || flat.ContactNo || flat.Mobile || "-"}</small></td><td>{flat.FlatTypeName || "-"}</td><td>{flat.Area || "-"}</td><td>{flat.FloorNo ?? flat.AssignedFloorNo ?? "-"} / {flat.BlockID ?? "-"}</td><td>{flat.FlatView || "-"}</td><td>{money(flat.FlatAmount)}</td><td>{money(flat.AdditionalAmount)}</td><td>{money(flat.arrears)}</td><td>{dateText(flat.BookingDate)}</td><td><span className="eb-admin-status">{statusText(flat.FlatStatus)}</span></td></tr>)}</tbody></table></div><div className="eb-flat-pagination"><span>Showing {pageStart + 1} to {Math.min(pageStart + pageSize, flats.length)} of {flats.length} entries</span><div className="eb-flat-page-buttons"><button type="button" aria-label="Previous page" disabled={currentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}>‹</button>{pageNumbers.map((page) => page.toString().startsWith("ellipsis") ? <span className="eb-flat-page-ellipsis" key={page}>...</span> : <button key={page} type="button" className={currentPage === page ? "eb-flat-page-active" : ""} aria-current={currentPage === page ? "page" : undefined} onClick={() => setCurrentPage(page)}>{page}</button>)}<button type="button" aria-label="Next page" disabled={currentPage === totalPages} onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}>›</button></div></div></> : <div className="eb-admin-user-state">No flat records found.</div>}
+      {loading ? <div className="eb-admin-user-state">Loading flat master...</div> : error && !flats.length ? <div className="eb-admin-user-state eb-admin-user-error">{error}</div> : flats.length ? <><div className="eb-admin-user-table-wrap"><table className="eb-admin-user-table"><thead><tr><th>Flat no.</th><th>Customer</th><th>Flat type</th><th>Area</th><th>Floor / block</th><th>View</th><th>Flat amount</th><th>Additional</th><th>Arrears</th><th>Booking date</th><th>Status</th><th>Actions</th></tr></thead><tbody>{visibleFlats.map((flat) => <tr key={flat.AssignFlatID}><td><strong>{flat.UnitNo || "-"}</strong><small>ID {flat.AssignFlatID}</small></td><td><strong>{flat.CustomerName || "-"}</strong><small>{flat.CustomerNo || flat.ContactNo || flat.Mobile || "-"}</small></td><td>{flat.FlatTypeName || "-"}</td><td>{flat.Area || "-"}</td><td>{flat.FloorNo ?? flat.AssignedFloorNo ?? "-"} / {flat.BlockID ?? "-"}</td><td>{flat.FlatView || "-"}</td><td>{money(flat.FlatAmount)}</td><td>{money(flat.AdditionalAmount)}</td><td>{money(flat.arrears)}</td><td>{dateText(flat.BookingDate)}</td><td><span className="eb-admin-status">{statusText(flat.FlatStatus)}</span></td><td><div className="eb-admin-row-actions"><button className="eb-admin-row-edit" type="button" onClick={() => editFlat(flat)} disabled={saving} aria-label={`Edit flat ${flat.UnitNo || flat.AssignFlatID}`} title="Edit flat"><Pencil size={15} /></button></div></td></tr>)}</tbody></table></div><div className="eb-flat-pagination"><span>Showing {pageStart + 1} to {Math.min(pageStart + pageSize, flats.length)} of {flats.length} entries</span><div className="eb-flat-page-buttons"><button type="button" aria-label="Previous page" disabled={currentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}>‹</button>{pageNumbers.map((page) => page.toString().startsWith("ellipsis") ? <span className="eb-flat-page-ellipsis" key={page}>...</span> : <button key={page} type="button" className={currentPage === page ? "eb-flat-page-active" : ""} aria-current={currentPage === page ? "page" : undefined} onClick={() => setCurrentPage(page)}>{page}</button>)}<button type="button" aria-label="Next page" disabled={currentPage === totalPages} onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}>›</button></div></div></> : <div className="eb-admin-user-state">No flat records found.</div>}
     </section>
   </div>;
 }

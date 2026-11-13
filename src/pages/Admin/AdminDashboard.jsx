@@ -30,7 +30,7 @@ const tabs = [
 const content = {
   "/admin": { title: "Admin overview", description: "Monitor electricity billing operations across the platform." },
   "/admin/users": { title: "User management", description: "Manage client accounts, meters, and account status." },
-  "/admin/flat-master": { title: "Flat master", description: "View assigned flats with customer, type, floor, amount, and status details." },
+  "/admin/flat-master": { title: "Flat master", description: "View and edit assigned flats, including customer, property, amount, arrears, and status details." },
   "/admin/bills": { title: "Bill management", description: "Review generated bills and billing activity." },
   "/admin/edit-bills": { title: "Edit bills", description: "Select a flat, review monthly bills, and save corrections." },
   "/admin/generate-bill": { title: "Generate bill", description: "Create and save electricity bills for client meters." },

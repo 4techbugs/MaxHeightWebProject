@@ -1261,6 +1261,64 @@ app.get("/api/admin/flat-master", async (request, response) => {
   }
 });
 
+app.put("/api/admin/flat-master/:flatId", async (request, response) => {
+  const flatId = Number(request.params.flatId);
+  const customerId = Number(request.body?.customerId);
+  const unitNo = String(request.body?.unitNo || "").trim();
+  const flatDetailId = Number(request.body?.flatDetailId);
+  const floorNo = Number(request.body?.floorNo);
+  const blockId = Number(request.body?.blockId);
+  const flatAmount = Number(request.body?.flatAmount || 0);
+  const additionalAmount = Number(request.body?.additionalAmount || 0);
+  const arrears = Number(request.body?.arrears || 0);
+  const bookingDate = String(request.body?.bookingDate || "").trim();
+  const status = String(request.body?.status || "Active").trim() || "Active";
+  const date = new Date(`${bookingDate}T00:00:00.000Z`);
+  const isValidAmount = (value) => Number.isFinite(value) && value >= 0 && value <= 9999999999999999
+    && Math.abs(value * 100 - Math.round(value * 100)) <= 1e-8;
+
+  if (!Number.isInteger(flatId) || flatId <= 0) {
+    return response.status(400).json({ message: "Invalid flat ID." });
+  }
+  if (!Number.isInteger(customerId) || customerId <= 0 || !unitNo || unitNo.length > 100
+    || !Number.isInteger(flatDetailId) || flatDetailId <= 0 || !Number.isInteger(floorNo)
+    || !Number.isInteger(blockId) || !isValidAmount(flatAmount) || !isValidAmount(additionalAmount)
+    || !isValidAmount(arrears) || !/^\d{4}-\d{2}-\d{2}$/.test(bookingDate)
+    || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== bookingDate) {
+    return response.status(400).json({ message: "Enter valid customer, flat details, amounts, and booking date." });
+  }
+
+  try {
+    const pool = await getDbPool();
+    const result = await pool.request()
+      .input("flatId", sql.Int, flatId)
+      .input("customerId", sql.Int, customerId)
+      .input("unitNo", sql.NVarChar(100), unitNo)
+      .input("flatDetailId", sql.Int, flatDetailId)
+      .input("floorNo", sql.Int, floorNo)
+      .input("flatAmount", sql.Decimal(18, 2), flatAmount)
+      .input("bookingDate", sql.Date, bookingDate)
+      .input("status", sql.NVarChar(50), status)
+      .input("blockId", sql.Int, blockId)
+      .input("additionalAmount", sql.Decimal(18, 2), additionalAmount)
+      .input("arrears", sql.Decimal(18, 2), arrears)
+      .query(`
+        UPDATE [dbo].[AssignFlat]
+        SET [CustomerID] = @customerId, [UnitNo] = @unitNo, [FlatDetailID] = @flatDetailId,
+            [FloorNo] = @floorNo, [FlatAmount] = @flatAmount, [BookingDate] = @bookingDate,
+            [Status] = @status, [BlockID] = @blockId, [AdditionalAmount] = @additionalAmount,
+            [arrears] = @arrears
+        OUTPUT INSERTED.[AssignFlatID]
+        WHERE [AssignFlatID] = @flatId
+      `);
+    if (!result.recordset.length) return response.status(404).json({ message: "Flat not found." });
+    return response.json({ message: "Flat updated successfully." });
+  } catch (error) {
+    console.error("Flat update failed:", error.message);
+    return response.status(503).json({ message: "Unable to update flat right now." });
+  }
+});
+
 app.post("/api/admin/flat-master/arrears-import", async (request, response) => {
   const rows = request.body?.rows;
   if (!Array.isArray(rows) || rows.length === 0 || rows.length > 1000) {
