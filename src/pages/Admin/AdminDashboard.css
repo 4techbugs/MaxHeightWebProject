@@ -120,3 +120,38 @@
 @media (max-width: 900px) { .eb-master-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .eb-master-form { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .eb-flat-pagination { align-items: flex-start; flex-direction: column; } }
+
+.eb-generate-payment-backdrop { position: fixed; z-index: 600; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(10, 27, 50, .58); }
+.eb-generate-payment-modal { display: flex; width: min(1120px, 100%); max-height: 92vh; flex-direction: column; overflow: hidden; border: 1px solid var(--eb-line); border-radius: 12px; background: #fff; box-shadow: 0 24px 70px rgba(11, 35, 70, .32); }
+.eb-generate-payment-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--eb-line); }
+.eb-generate-payment-header h2 { margin: 0 0 4px; color: var(--eb-ink); font: 700 16px 'Plus Jakarta Sans'; }
+.eb-generate-payment-header p { margin: 0; color: var(--eb-muted); font-size: 11px; }
+.eb-generate-payment-actions, .eb-generate-payment-search-form { display: flex; align-items: center; gap: 8px; }
+.eb-generate-payment-search-form { margin: 0; }
+.eb-generate-payment-search-form label { display: flex; width: min(340px, 28vw); min-height: 40px; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid #d9e0eb; border-radius: 9px; color: var(--eb-muted); background: #fff; }
+.eb-generate-payment-search-form label:focus-within { border-color: var(--eb-blue); box-shadow: 0 0 0 3px rgba(23,105,224,.1); }
+.eb-generate-payment-search-form input { width: 100%; min-width: 0; border: 0; outline: 0; color: var(--eb-ink); background: transparent; font-size: 12px; }
+.eb-generate-payment-close { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border: 1px solid #d9e0eb; border-radius: 8px; color: var(--eb-ink); background: #fff; cursor: pointer; }
+.eb-generate-payment-close:hover { color: #fff; background: var(--eb-blue); }
+.eb-generate-payment-table-wrap { min-height: 0; overflow: auto; }
+.eb-generate-payment-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.eb-generate-payment-table th, .eb-generate-payment-table td { padding: 13px 18px; border-bottom: 1px solid #edf1f6; text-align: left; white-space: nowrap; }
+.eb-generate-payment-table th { position: sticky; top: 0; color: var(--eb-muted); background: #f8fafc; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.eb-generate-payment-state { display: flex; min-height: 150px; align-items: center; justify-content: center; padding: 20px; color: var(--eb-muted); font-size: 13px; }
+.eb-generate-payment-error { color: #a13b3b; }
+@media (max-width: 760px) {
+  .eb-generate-payment-backdrop { padding: 12px; }
+  .eb-generate-payment-modal { max-height: 96vh; }
+  .eb-generate-payment-header { align-items: flex-start; flex-direction: column; }
+  .eb-generate-payment-actions, .eb-generate-payment-search-form { width: 100%; flex-wrap: wrap; }
+  .eb-generate-payment-search-form label { box-sizing: border-box; width: 100%; flex: 1 1 100%; }
+}
+@media print {
+  .eb-admin-shell * { visibility: hidden !important; }
+  .eb-admin-shell .eb-generate-payment-backdrop, .eb-admin-shell .eb-generate-payment-backdrop * { visibility: visible !important; }
+  .eb-generate-payment-backdrop { position: absolute; display: block !important; inset: 0; padding: 0; background: #fff; }
+  .eb-generate-payment-modal { width: 100%; max-height: none; overflow: visible; border: 0; border-radius: 0; box-shadow: none; }
+  .eb-generate-payment-actions { display: none !important; }
+  .eb-generate-payment-table-wrap { overflow: visible; }
+  .eb-generate-payment-table th { position: static; }
+}

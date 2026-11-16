@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { CalendarPlus, Calculator, FileSpreadsheet, Printer, RotateCcw, Save, Table2, Trash2, Upload } from "lucide-react";
+import { CalendarPlus, Calculator, FileSpreadsheet, Printer, RotateCcw, Save, Search, Table2, Trash2, Upload, X } from "lucide-react";
 
 const empty = { flat: "", meter: "", grid: "", gd: "", arrears: "", customerName: "", load: "", previousBalance: "", fromDate: "", toDate: "", billDate: "", dueDate: "", chargeRate: "1", dgCharge: "26", penalty: "0", discount: "0" };
+const billDateFields = ["fromDate", "toDate", "billDate", "dueDate"];
+const savedBillDates = () => {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem("powerpay-generate-bill-dates") || "{}");
+    return Object.fromEntries(billDateFields.map((field) => [field, typeof stored[field] === "string" ? stored[field] : ""]));
+  } catch {
+    return {};
+  }
+};
 
 const getFlatField = (flat, ...keys) => {
   for (const key of keys) {
@@ -86,7 +95,7 @@ function calculateSlab(units) {
 function AdminGenerateBill() {
   const location = useLocation();
   const [billMode, setBillMode] = useState("single");
-  const [form, setForm] = useState(empty);
+  const [form, setForm] = useState(() => ({ ...empty, ...savedBillDates() }));
   const [monthlyRows, setMonthlyRows] = useState(() => [createMonthlyRow()]);
   const [savingMonthlyRows, setSavingMonthlyRows] = useState(false);
   const [importingMonthlyWorkbook, setImportingMonthlyWorkbook] = useState(false);
@@ -106,9 +115,22 @@ function AdminGenerateBill() {
   const [editingMaster, setEditingMaster] = useState(null);
   const [masterEditAmount, setMasterEditAmount] = useState("");
   const [masterEditSaving, setMasterEditSaving] = useState(false);
+  const [paymentListOpen, setPaymentListOpen] = useState(false);
+  const [paymentList, setPaymentList] = useState([]);
+  const [paymentListLoading, setPaymentListLoading] = useState(false);
+  const [paymentListError, setPaymentListError] = useState("");
+  const [paymentSearch, setPaymentSearch] = useState("");
+  const [appliedPaymentSearch, setAppliedPaymentSearch] = useState("");
   const flatPickerRef = useRef(null);
   const monthlyWorkbookRef = useRef(null);
   const set = (field) => (event) => { setForm((current) => ({ ...current, [field]: event.target.value })); setSaved(false); };
+  const clearBillFields = () => setForm((current) => ({
+    ...empty,
+    fromDate: current.fromDate,
+    toDate: current.toDate,
+    billDate: current.billDate,
+    dueDate: current.dueDate,
+  }));
   const values = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, Number(value) || 0]));
   const slabAmounts = useMemo(() => calculateSlab(values.grid), [values.grid]);
   const fixedCharges = 495;
@@ -118,6 +140,27 @@ function AdminGenerateBill() {
   const masterRecord = (type) => billRates.masters?.find((master) => master.MasterType === type);
   const openMasterEdit = (type) => { const master = masterRecord(type); setEditingMaster(master); setMasterEditAmount(String(master?.Amount ?? "")); };
   const closeMasterEdit = () => { if (!masterEditSaving) { setEditingMaster(null); setMasterEditAmount(""); } };
+  const openPaymentList = async () => {
+    setPaymentListOpen(true);
+    setPaymentListLoading(true);
+    setPaymentListError("");
+    try {
+      const response = await fetch("/api/admin/payments");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to load payments.");
+      if (!Array.isArray(data)) throw new Error("The payment list response was invalid.");
+      setPaymentList(data);
+    } catch (error) {
+      setPaymentListError(error.message || "Unable to load payments.");
+    } finally {
+      setPaymentListLoading(false);
+    }
+  };
+  const filteredPayments = paymentList.filter((payment) => {
+    const query = appliedPaymentSearch.toLowerCase();
+    return [payment.UnitNo, payment.CustomerName, payment.PaymentMode, payment.Bank, payment.Branch, payment.ChequeNo, payment.Amount]
+      .some((value) => String(value ?? "").toLowerCase().includes(query));
+  });
   const saveMasterEdit = async () => {
     if (!editingMaster?.ID || !Number.isFinite(Number(masterEditAmount))) return;
     setMasterEditSaving(true);
@@ -157,6 +200,12 @@ function AdminGenerateBill() {
   useEffect(() => {
     fetch("/api/bill-rates").then((response) => response.json()).then(setBillRates).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem("powerpay-generate-bill-dates", JSON.stringify(
+      Object.fromEntries(billDateFields.map((field) => [field, form[field]])),
+    ));
+  }, [form.fromDate, form.toDate, form.billDate, form.dueDate]);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("powerpay-edit-bill");
@@ -511,7 +560,7 @@ function AdminGenerateBill() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Unable to save bill.");
-      setForm(empty);
+      clearBillFields();
       setFlatOpen(false);
       setEditingBillId(null);
       setEditingStatus("Pending");
@@ -573,11 +622,38 @@ function AdminGenerateBill() {
         <label><span className="eb-charge-label">CT/DT Rent (Rs.)<button className="eb-charge-edit" type="button" onClick={() => openMasterEdit("CT/DT Rent")}>Edit</button></span><input type="text" value={masterDisplayAmount("CT/DT Rent")} readOnly /></label>
         <label><span className="eb-charge-label">Duty (Rs.)<button className="eb-charge-edit" type="button" onClick={() => openMasterEdit("Duty")}>Edit</button></span><input type="text" value={masterDisplayAmount("Duty")} readOnly /></label>
       </div>
-      <div className="eb-admin-bill-actions"><button className="eb-btn eb-btn-primary" type="button" onClick={handleSave}><Save size={16} />{editingBillId ? "Update bill" : "Save bill"}</button><button className="eb-btn eb-btn-light" type="button" onClick={() => { setForm(empty); setEditingBillId(null); setEditingStatus("Pending"); setSaved(false); }}><RotateCcw size={16} />Reset</button><button className="eb-btn eb-btn-light" type="button" onClick={() => window.print()}><Printer size={16} />Print</button></div>
+      <div className="eb-admin-bill-actions"><button className="eb-btn eb-btn-primary" type="button" onClick={handleSave}><Save size={16} />{editingBillId ? "Update bill" : "Save bill"}</button><button className="eb-btn eb-btn-light" type="button" onClick={() => { clearBillFields(); setEditingBillId(null); setEditingStatus("Pending"); setSaved(false); }}><RotateCcw size={16} />Reset</button><button className="eb-btn eb-btn-light" type="button" onClick={() => window.print()}><Printer size={16} />Print</button><button className="eb-btn eb-btn-light" type="button" onClick={openPaymentList}><Table2 size={16} />Payment List</button></div>
       {saved && <div className="eb-admin-saved">Bill saved successfully for admin review.</div>}
     </section>
     <section className="eb-admin-bill-summary"><div className="eb-admin-table-head"><div><h2>Bill summary</h2><p>Live payable amount</p></div></div><div className="eb-admin-total-label">Final payable amount<strong>Rs. {total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></div><div className="eb-admin-summary-line"><span>Rate amount</span><strong>Rs. {slabAmounts.rateAmount.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Charge amount</span><strong>Rs. {slabAmounts.chargeAmount.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>DG amount</span><strong>Rs. {dgAmount.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Fuel Search Charges ({values.grid} × Rs. {masterAmount("Fuel Search Charges").toFixed(2)})</span><strong>Rs. {fuelSearchCharges.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>CT/DT Rent</span><strong>Rs. {ctDtRent.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Duty ({values.grid} × Rs. {masterAmount("Duty").toFixed(2)})</span><strong>Rs. {dutyCharges.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Fixed charges</span><strong>Rs. {fixedCharges.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Previous balance</span><strong>Rs. {values.arrears.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Interest on arrears</span><strong>Rs. {values.penalty.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Discount</span><strong>Rs. {values.discount.toFixed(2)}</strong></div></section>
     {editingMaster && <div className="eb-master-modal-backdrop" role="presentation" onMouseDown={closeMasterEdit}><div className="eb-master-modal" role="dialog" aria-modal="true" aria-labelledby="master-edit-title" onMouseDown={(event) => event.stopPropagation()}><h2 id="master-edit-title">Edit {editingMaster.MasterType}</h2><p>Change the amount for this master.</p><label>Amount<input type="number" step="0.01" value={masterEditAmount} onChange={(event) => setMasterEditAmount(event.target.value)} autoFocus /></label><div className="eb-master-modal-actions"><button className="eb-btn eb-btn-light" type="button" onClick={closeMasterEdit} disabled={masterEditSaving}>Cancel</button><button className="eb-btn eb-btn-primary" type="button" onClick={saveMasterEdit} disabled={masterEditSaving}>{masterEditSaving ? "Saving..." : "Save"}</button></div></div></div>}
+    {paymentListOpen && <div className="eb-generate-payment-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPaymentListOpen(false); }}>
+      <section className="eb-generate-payment-modal" role="dialog" aria-modal="true" aria-labelledby="eb-generate-payment-title">
+        <header className="eb-generate-payment-header">
+          <div><h2 id="eb-generate-payment-title">Payment List</h2><p>{paymentList.length} active payment{paymentList.length === 1 ? "" : "s"}</p></div>
+          <div className="eb-generate-payment-actions">
+            <form className="eb-generate-payment-search-form" onSubmit={(event) => { event.preventDefault(); setAppliedPaymentSearch(paymentSearch.trim()); }}>
+              <label htmlFor="generate-payment-search"><Search size={16} /><input id="generate-payment-search" value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} placeholder="Search customer, unit, amount..." /></label>
+              <button className="eb-btn eb-btn-light" type="submit"><Search size={15} />Search</button>
+            </form>
+            <button className="eb-btn eb-btn-primary" type="button" onClick={() => window.print()} disabled={!filteredPayments.length}><Printer size={15} />Print</button>
+            <button className="eb-generate-payment-close" type="button" onClick={() => setPaymentListOpen(false)} aria-label="Close payment list"><X size={19} /></button>
+          </div>
+        </header>
+        {paymentListLoading ? <div className="eb-generate-payment-state">Loading payments...</div>
+          : paymentListError ? <div className="eb-generate-payment-state eb-generate-payment-error" role="alert">{paymentListError}</div>
+            : filteredPayments.length ? <div className="eb-generate-payment-table-wrap">
+              <table className="eb-generate-payment-table">
+                <thead><tr><th>Unit No</th><th>Customer</th><th>Mode</th><th>Bank</th><th>Reference</th><th>Amount</th><th>Receipt date</th><th>Status</th></tr></thead>
+                <tbody>{filteredPayments.map((payment) => <tr key={payment.ID}>
+                  <td>{payment.UnitNo || "-"}</td><td>{payment.CustomerName || "-"}</td><td>{payment.PaymentMode || "-"}</td>
+                  <td>{payment.Bank || "-"}</td><td>{payment.ChequeNo || "-"}</td><td>Rs. {Number(payment.Amount || 0).toFixed(2)}</td>
+                  <td>{payment.ReceiptDate ? new Date(payment.ReceiptDate).toLocaleDateString("en-IN") : "-"}</td><td>{payment.Status || "Active"}</td>
+                </tr>)}</tbody>
+              </table>
+            </div> : <div className="eb-generate-payment-state">{paymentList.length ? "No payments match your search." : "No active payments found."}</div>}
+      </section>
+    </div>}
     </div>}
   </div>;
 }

@@ -273,6 +273,6 @@ function GenerateBill() {
         </div>
       </div>
     </div>
-  );
+  ); 
 }
 export default GenerateBill;
