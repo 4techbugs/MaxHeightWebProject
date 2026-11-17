@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Calculator, FilePlus2, Printer, RotateCcw, Save } from "lucide-react";
 import Navbar from "../../components/Navbar/Navbar.jsx";
 import Sidebar from "../../components/Sidebar/Sidebar.jsx";
+import { sanctionedLoadForFlat } from "../../utils/billDisplay.js";
 import "./GenerateBill.css";
 
 const slabs = [
@@ -132,6 +133,7 @@ function GenerateBill() {
   const dueDateText = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString("en-IN");
   const customerName = activeProfile ? activeProfile.customerName : (form.flat ? "Customer Walk-in" : "Customer Name");
   const unitNo = activeProfile ? (activeProfile.unitNo || form.unitNo || form.flat || "-") : (form.unitNo || form.flat || "-");
+  const sanctionedLoad = sanctionedLoadForFlat(unitNo, activeProfile?.load);
   const meterNo = form.meter || activeProfile?.meter || "-";
   const billAddress = `${unitNo}, ${billingAddress}`;
   const billContact = activeProfile ? (activeProfile.phone || "-") : "-";
@@ -252,7 +254,7 @@ function GenerateBill() {
                   </div>
                   <div className="eb-ref-meta-row">
                     <span>Sanctioned Load</span>
-                    <strong>12 KW</strong>
+                    <strong>{sanctionedLoad || "-"}</strong>
                   </div>
                   <div className="eb-ref-meta-row date-row">
                     <span>Bill Period:</span>

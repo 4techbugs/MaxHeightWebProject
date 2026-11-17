@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { CalendarPlus, Calculator, FileSpreadsheet, Printer, RotateCcw, Save, Search, Table2, Trash2, Upload, X } from "lucide-react";
+import { sanctionedLoadForFlat } from "../../utils/billDisplay.js";
 
 const empty = { flat: "", meter: "", grid: "", gd: "", arrears: "", customerName: "", load: "", previousBalance: "", fromDate: "", toDate: "", billDate: "", dueDate: "", chargeRate: "1", dgCharge: "26", penalty: "0", discount: "0" };
 const billDateFields = ["fromDate", "toDate", "billDate", "dueDate"];
@@ -219,7 +220,8 @@ function AdminGenerateBill() {
       setEditingStatus(String(first("Status") || "Pending").trim());
       setForm({
         ...empty,
-        flat: flat?.UnitNo || first("FlatID"), meter: first("MeterNumber", "MeeterNumber"), customerName: first("CustomerName"), load: first("Load"),
+        flat: flat?.UnitNo || first("FlatID"), meter: first("MeterNumber", "MeeterNumber"), customerName: first("CustomerName"),
+        load: sanctionedLoadForFlat(flat?.UnitNo || first("FlatID"), first("Load")),
         grid: first("Unit"), gd: first("DGUnit"), arrears: first("PreviousBalance", "PriviousBalance"), penalty: first("penalty", "Penalty"), discount: first("Discount"),
         fromDate: dateValue(first("FromDate")), toDate: dateValue(first("ToDate")), billDate: dateValue(first("BillDate")), dueDate: dateValue(first("DueDate")),
         dgCharge: first("DGUnit") ? String(Number(first("DGCharge", "DGAmount")) / Number(first("DGUnit")) || 26) : "26",
@@ -270,7 +272,7 @@ function AdminGenerateBill() {
   const selectFlat = async (flat) => {
     const flatMeter = getFlatField(flat, "meter", "MeterNumber", "MeeterNumber");
     const flatCustomerName = getFlatField(flat, "customerName", "CustomerName");
-    const flatLoad = getFlatField(flat, "load", "Load");
+    const flatLoad = sanctionedLoadForFlat(flat.UnitNo, getFlatField(flat, "load", "Load"));
     const flatPreviousBalance = Number(getFlatField(flat, "previousBalance", "PreviousBalance", "PriviousBalance") || 0);
     let penalty = Number(flat.previousPenalty || flat.PreviousPenalty || 0);
     try {
@@ -313,7 +315,7 @@ function AdminGenerateBill() {
   const selectMonthlyFlat = (rowId, flat) => {
     const flatMeter = getFlatField(flat, "meter", "MeterNumber", "MeeterNumber");
     const flatCustomerName = getFlatField(flat, "customerName", "CustomerName");
-    const flatLoad = getFlatField(flat, "load", "Load");
+    const flatLoad = sanctionedLoadForFlat(flat.UnitNo, getFlatField(flat, "load", "Load"));
     const flatAddress = getFlatField(flat, "address", "Address");
     const flatPreviousBalance = Number(getFlatField(flat, "previousBalance", "PreviousBalance", "PriviousBalance") || 0);
     const flatPreviousPenalty = Number(getFlatField(flat, "previousPenalty", "PreviousPenalty") || 0);
@@ -415,7 +417,7 @@ function AdminGenerateBill() {
           flatSearch: flatRecord.UnitNo,
           customerName: row.customerName || getFlatField(flatRecord, "customerName", "CustomerName"),
           meter: row.meter || getFlatField(flatRecord, "meter", "MeterNumber", "MeeterNumber"),
-          load: row.load || getFlatField(flatRecord, "load", "Load"),
+          load: sanctionedLoadForFlat(flatRecord.UnitNo, row.load || getFlatField(flatRecord, "load", "Load")),
           address: getFlatField(flatRecord, "address", "Address"),
           arrears: Number(flatRecord.billCount) > 0 || columns.arrears < 0
             ? String(getFlatField(flatRecord, "previousBalance", "PreviousBalance", "PriviousBalance") || 0)

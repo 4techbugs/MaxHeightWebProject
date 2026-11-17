@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Download, FileSpreadsheet, FileText, FileType, Printer, RefreshCw, Search, X } from "lucide-react";
 import { jsPDF } from "jspdf";
+import { sanctionedLoadForFlat } from "../../utils/billDisplay.js";
 
 const BILLING_ADDRESS = "Max Heiights Majestic, GH-III, Suncity Township, Village Nindar, Grand Sikar Road, Jaipur-302013";
 const value = (bill, ...keys) => keys.map((key) => bill[key]).find((item) => item !== undefined && item !== null) ?? "";
@@ -63,6 +64,7 @@ function mapBill(bill, billRates = {}) {
   return {
     id: value(bill, "ID", "Id"), receipt: billDisplayNo(value(bill, "ReceiptID") || value(bill, "ID", "Id"), billDate),
     flat: value(bill, "UnitNo", "FlatNo", "FlatID"), customer: value(bill, "CustomerName") || "-", address: `${value(bill, "UnitNo", "FlatNo", "FlatID") || "-"}, ${BILLING_ADDRESS}`, meter: value(bill, "MeterNumber", "MeeterNumber") || "-",
+    load: sanctionedLoadForFlat(value(bill, "UnitNo", "FlatNo", "FlatID"), value(bill, "Load")),
     grid, gridCharge, dg, dgCharge, fixed, fuelRate, fuelSearchCharge, dutyRate, ctDtRent, duty, arrears, interest, other, chargesTotal, total,
     status: String(value(bill, "Status") || "Pending").trim(), billDate, dueDate: value(bill, "DueDate"),
     fromDate: value(bill, "FromDate"), toDate: value(bill, "ToDate"), remarks: value(bill, "Remarks")
@@ -125,8 +127,8 @@ function createBillPdf(row) {
   setFont(true, 14, navy);
   pdf.text("PAAS SIKAR LOGISTICS LLP", pageW / 2, 39, { align: "center" });
   setFont(false, 7.8, text);
-  pdf.text(". Reg. office at GH-III, Suncity Township, Sikar Road, Jaipur-302013.", pageW / 2, 47, { align: "center" });
-  pdf.text("Corp. office at A-17, Ground Floor, Pitampura, New Delhi-110034..", pageW / 2, 52, { align: "center" });
+  pdf.text("Reg. office at GH-III, Suncity Township, Sikar Road, Jaipur-302013.", pageW / 2, 47, { align: "center" });
+  pdf.text("Corp. office at A-17, Ground Floor, Pitampura, New Delhi-110034.", pageW / 2, 52, { align: "center" });
 
   // =========================
   // CUSTOMER / METER / BILL INFORMATION
@@ -165,7 +167,7 @@ function createBillPdf(row) {
   label("So/WoDs.:", ix + 3, infoY + rowH + 8.3);
   val(customerName, ix + 25, infoY + rowH + 8.3, c1 - 28);
   label("Sanctioned Load:", ix + c1 + 3, infoY + rowH + 8.3);
-  val("12 KW", ix + c1 + 38, infoY + rowH + 8.3, c2 - 41);
+  val(row.load || "-", ix + c1 + 38, infoY + rowH + 8.3, c2 - 41);
   label("Bill Date:", ix + c1 + c2 + 3, infoY + rowH + 8.3);
   val(billDate, ix + c1 + c2 + 22, infoY + rowH + 8.3, c3 - 25);
 
