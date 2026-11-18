@@ -2,7 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { BookOpenText, Download, RefreshCw, Search } from "lucide-react";
 
 const money = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const dateValue = (value) => value ? new Date(value).toLocaleDateString("en-IN") : "-";
+const parseLedgerDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+  const text = String(value).trim();
+  const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:T.*)?$/);
+  if (isoMatch) return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+
+  const indianMatch = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (indianMatch) return new Date(Number(indianMatch[3]), Number(indianMatch[2]) - 1, Number(indianMatch[1]));
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+const dateValue = (value) => {
+  const date = parseLedgerDate(value);
+  return date ? date.toLocaleDateString("en-IN") : "-";
+};
 const billColumns = [
   ["Flat", "UnitNo"], ["Customer", "CustomerName"], ["Bill No", "ReceiptID"],
   ["Bill date", "BillDate"], ["Due date", "DueDate"],
@@ -56,7 +73,8 @@ const summarizeRecords = (records, amountField, dateField, billSummary = false) 
         + Number(record.DutyCharge || 0) + Number(record.FixedCharge || 0)
         + Number(record.OtherCharge || 0);
     }
-    if (record[dateField] && (!summary.LastDate || new Date(record[dateField]) > new Date(summary.LastDate))) {
+    if (record[dateField] && (!summary.LastDate
+      || (parseLedgerDate(record[dateField])?.getTime() || 0) > (parseLedgerDate(summary.LastDate)?.getTime() || 0))) {
       summary.LastDate = record[dateField];
     }
     summaries.set(key, summary);
@@ -95,8 +113,8 @@ const summarizeFlatActivity = (bills, payments) => {
     const billAmount = Number(bill.TotalPaidAmount || bill.ChargeAmount || 0);
     const currentCharges = billAmount - previousBalance;
     summary.BillAmount += currentCharges;
-    const billDate = bill.BillDate ? new Date(bill.BillDate) : null;
-    const openingDate = summary.OpeningDate ? new Date(summary.OpeningDate) : null;
+    const billDate = parseLedgerDate(bill.BillDate);
+    const openingDate = parseLedgerDate(summary.OpeningDate);
     if (billDate && !Number.isNaN(billDate.getTime())
       && (!openingDate || billDate < openingDate
         || (billDate.getTime() === openingDate.getTime() && Number(bill.ID) < Number(summary.OpeningBillID)))) {
@@ -108,8 +126,8 @@ const summarizeFlatActivity = (bills, payments) => {
   payments.forEach((payment) => {
     const summary = getSummary(payment);
     const amount = Number(payment.Amount || 0);
-    const openingDate = summary.OpeningDate ? new Date(summary.OpeningDate) : null;
-    const receiptDate = payment.ReceiptDate ? new Date(payment.ReceiptDate) : null;
+    const openingDate = parseLedgerDate(summary.OpeningDate);
+    const receiptDate = parseLedgerDate(payment.ReceiptDate);
     if (!openingDate || !receiptDate || Number.isNaN(receiptDate.getTime()) || receiptDate >= openingDate) {
       summary.PaymentCount += 1;
       summary.PaymentAmount += amount;
@@ -128,12 +146,12 @@ const summarizeFlatActivity = (bills, payments) => {
 const createActivityRows = (bills, payments, summaries) => {
   const openingDates = new Map(summaries.map((summary) => [
     ledgerFlatKey(summary),
-    summary.OpeningDate ? new Date(summary.OpeningDate) : null,
+    parseLedgerDate(summary.OpeningDate),
   ]));
   const paymentRows = payments
     .filter((payment) => {
       const openingDate = openingDates.get(ledgerFlatKey(payment));
-      const receiptDate = payment.ReceiptDate ? new Date(payment.ReceiptDate) : null;
+      const receiptDate = parseLedgerDate(payment.ReceiptDate);
       return !openingDate || !receiptDate || Number.isNaN(receiptDate.getTime()) || receiptDate >= openingDate;
     })
     .map((payment) => ({
@@ -173,7 +191,8 @@ const createActivityRows = (bills, payments, summaries) => {
     Credit: summary.ClosingBalance < 0 ? Math.abs(summary.ClosingBalance) : 0,
   }));
   const transactionRows = [...billRows, ...paymentRows]
-    .sort((first, second) => new Date(second.Date || 0) - new Date(first.Date || 0));
+    .sort((first, second) =>
+      (parseLedgerDate(first.Date)?.getTime() || 0) - (parseLedgerDate(second.Date)?.getTime() || 0));
   return [...openingRows, ...transactionRows, ...closingRows];
 };
 
@@ -339,7 +358,7 @@ function AdminLedger() {
       ];
       transactionsSheet.addRows(activityRows.map((row) => ({
         ...row,
-        Date: row.Date && !Number.isNaN(new Date(row.Date).getTime()) ? new Date(row.Date) : null,
+        Date: parseLedgerDate(row.Date),
       })));
       transactionsSheet.getColumn("Date").numFmt = "dd/mm/yyyy";
       transactionsSheet.getColumn("Debit").numFmt = "#,##0.00";

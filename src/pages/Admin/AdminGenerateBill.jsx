@@ -4,6 +4,9 @@ import { CalendarPlus, Calculator, FileSpreadsheet, Printer, RotateCcw, Save, Se
 import { sanctionedLoadForFlat } from "../../utils/billDisplay.js";
 
 const empty = { flat: "", meter: "", grid: "", gd: "", arrears: "", customerName: "", load: "", previousBalance: "", fromDate: "", toDate: "", billDate: "", dueDate: "", chargeRate: "1", dgCharge: "26", penalty: "0", discount: "0" };
+const blurNumberInputOnWheel = (event) => {
+  if (event.target instanceof HTMLInputElement && event.target.type === "number") event.target.blur();
+};
 const billDateFields = ["fromDate", "toDate", "billDate", "dueDate"];
 const savedBillDates = () => {
   try {
@@ -107,6 +110,8 @@ function AdminGenerateBill() {
   const [monthlyFlatOptions, setMonthlyFlatOptions] = useState([]);
   const [monthlyFlatLoading, setMonthlyFlatLoading] = useState(false);
   const [editingBillId, setEditingBillId] = useState(null);
+  const [refreshingArrears, setRefreshingArrears] = useState(false);
+  const [arrearsRefreshError, setArrearsRefreshError] = useState("");
   const [editingStatus, setEditingStatus] = useState("Pending");
   const [saved, setSaved] = useState(false);
   const [flatOptions, setFlatOptions] = useState([]);
@@ -231,6 +236,29 @@ function AdminGenerateBill() {
       sessionStorage.removeItem("powerpay-edit-bill");
     }
   }, [location.state]);
+
+  useEffect(() => {
+    if (!editingBillId) return undefined;
+    const controller = new AbortController();
+    const refreshArrears = async () => {
+      setRefreshingArrears(true);
+      setArrearsRefreshError("");
+      setForm((current) => ({ ...current, arrears: "" }));
+      try {
+        const response = await fetch(`/api/bills/${editingBillId}/arrears`, { signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || "Unable to refresh the previous balance.");
+        if (!Number.isFinite(Number(data.arrears))) throw new Error("The refreshed previous balance is invalid.");
+        setForm((current) => ({ ...current, arrears: String(data.arrears) }));
+      } catch (error) {
+        if (error.name !== "AbortError") setArrearsRefreshError(error.message);
+      } finally {
+        if (!controller.signal.aborted) setRefreshingArrears(false);
+      }
+    };
+    refreshArrears();
+    return () => controller.abort();
+  }, [editingBillId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -522,6 +550,7 @@ function AdminGenerateBill() {
   };
 
   const handleSave = async () => {
+    if (editingBillId && (refreshingArrears || arrearsRefreshError)) return;
     if (!form.fromDate || !form.toDate || !form.billDate || !form.dueDate) {
       alert("Please select From Date, To Date, Bill Date, and Due Date.");
       return;
@@ -572,7 +601,7 @@ function AdminGenerateBill() {
     }
   };
 
-  return <div className="eb-admin-generate-bill">
+  return <div className="eb-admin-generate-bill" onWheelCapture={blurNumberInputOnWheel}>
     <div className="eb-generate-mode-tabs" role="tablist" aria-label="Bill generation mode">
       <button className={`eb-generate-mode-tab ${billMode === "single" ? "eb-generate-mode-tab-active" : ""}`} type="button" role="tab" aria-selected={billMode === "single"} onClick={() => setBillMode("single")}>Single Bill</button>
       <button className={`eb-generate-mode-tab ${billMode === "table" ? "eb-generate-mode-tab-active" : ""}`} type="button" role="tab" aria-selected={billMode === "table"} disabled={Boolean(editingBillId)} onClick={() => setBillMode("table")}><Table2 size={15} />Monthly Table</button>
@@ -617,14 +646,15 @@ function AdminGenerateBill() {
         <label>Grid units (kWh)<input type="number" value={form.grid} onChange={set("grid")} placeholder="e.g. 320" /></label>
         <label>DG units<input type="number" value={form.gd} onChange={set("gd")} placeholder="e.g. 45" /></label>
         <label>DG charge per unit (Rs.)<input type="number" value={form.dgCharge} readOnly /></label>
-        <label>Arrears / previous balance (Rs.)<input type="number" value={form.arrears} readOnly placeholder="Select a flat to bind" /></label>
+        <label>Arrears / previous balance (Rs.){editingBillId && refreshingArrears && <small>Refreshing from current payments...</small>}<input type="number" value={form.arrears} readOnly placeholder="Select a flat to bind" /></label>
         <label>Interest on arrears (Rs.)<input type="number" min="0" step="0.01" value={form.penalty} onChange={set("penalty")} /></label>
         <label>Discount (Rs.)<input type="number" value={form.discount} onChange={set("discount")} /></label>
         <label><span className="eb-charge-label">Fuel Search Charges (Rs.)<button className="eb-charge-edit" type="button" onClick={() => openMasterEdit("Fuel Search Charges")}>Edit</button></span><input type="text" value={masterDisplayAmount("Fuel Search Charges")} readOnly /></label>
         <label><span className="eb-charge-label">CT/DT Rent (Rs.)<button className="eb-charge-edit" type="button" onClick={() => openMasterEdit("CT/DT Rent")}>Edit</button></span><input type="text" value={masterDisplayAmount("CT/DT Rent")} readOnly /></label>
         <label><span className="eb-charge-label">Duty (Rs.)<button className="eb-charge-edit" type="button" onClick={() => openMasterEdit("Duty")}>Edit</button></span><input type="text" value={masterDisplayAmount("Duty")} readOnly /></label>
       </div>
-      <div className="eb-admin-bill-actions"><button className="eb-btn eb-btn-primary" type="button" onClick={handleSave}><Save size={16} />{editingBillId ? "Update bill" : "Save bill"}</button><button className="eb-btn eb-btn-light" type="button" onClick={() => { clearBillFields(); setEditingBillId(null); setEditingStatus("Pending"); setSaved(false); }}><RotateCcw size={16} />Reset</button><button className="eb-btn eb-btn-light" type="button" onClick={() => window.print()}><Printer size={16} />Print</button><button className="eb-btn eb-btn-light" type="button" onClick={openPaymentList}><Table2 size={16} />Payment List</button></div>
+      <div className="eb-admin-bill-actions"><button className="eb-btn eb-btn-primary" type="button" onClick={handleSave} disabled={refreshingArrears || Boolean(arrearsRefreshError)}><Save size={16} />{refreshingArrears ? "Refreshing balance..." : editingBillId ? "Update bill" : "Save bill"}</button><button className="eb-btn eb-btn-light" type="button" onClick={() => { clearBillFields(); setEditingBillId(null); setRefreshingArrears(false); setArrearsRefreshError(""); setEditingStatus("Pending"); setSaved(false); }}><RotateCcw size={16} />Reset</button><button className="eb-btn eb-btn-light" type="button" onClick={() => window.print()}><Printer size={16} />Print</button><button className="eb-btn eb-btn-light" type="button" onClick={openPaymentList}><Table2 size={16} />Payment List</button></div>
+      {arrearsRefreshError && <div className="eb-admin-user-message eb-admin-user-error">{arrearsRefreshError}</div>}
       {saved && <div className="eb-admin-saved">Bill saved successfully for admin review.</div>}
     </section>
     <section className="eb-admin-bill-summary"><div className="eb-admin-table-head"><div><h2>Bill summary</h2><p>Live payable amount</p></div></div><div className="eb-admin-total-label">Final payable amount<strong>Rs. {total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></div><div className="eb-admin-summary-line"><span>Rate amount</span><strong>Rs. {slabAmounts.rateAmount.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Charge amount</span><strong>Rs. {slabAmounts.chargeAmount.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>DG amount</span><strong>Rs. {dgAmount.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Fuel Search Charges ({values.grid} × Rs. {masterAmount("Fuel Search Charges").toFixed(2)})</span><strong>Rs. {fuelSearchCharges.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>CT/DT Rent</span><strong>Rs. {ctDtRent.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Duty ({values.grid} × Rs. {masterAmount("Duty").toFixed(2)})</span><strong>Rs. {dutyCharges.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Fixed charges</span><strong>Rs. {fixedCharges.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Previous balance</span><strong>Rs. {values.arrears.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Interest on arrears</span><strong>Rs. {values.penalty.toFixed(2)}</strong></div><div className="eb-admin-summary-line"><span>Discount</span><strong>Rs. {values.discount.toFixed(2)}</strong></div></section>

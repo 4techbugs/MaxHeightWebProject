@@ -1,3 +1,9 @@
+export function calculateArrears(openingBalance, billedCharges, paidAmount) {
+  return Math.max(0, Math.round((
+    Number(openingBalance || 0) + Number(billedCharges || 0) - Number(paidAmount || 0)
+  ) * 100) / 100);
+}
+
 export function normalizeBillPayload(payload = {}) {
   const safeNumber = (value, fallback = 0) => {
     const parsed = Number(value ?? fallback);
@@ -17,8 +23,8 @@ export function normalizeBillPayload(payload = {}) {
     if (!raw) return fallback;
 
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-      const parsed = new Date(`${raw}T00:00:00`);
-      return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+      const parsed = new Date(`${raw}T00:00:00.000Z`);
+      return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== raw ? fallback : parsed;
     }
 
     if (/^\d{2}:\d{2}(:\d{2})?$/.test(raw)) {

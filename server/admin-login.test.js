@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeBillPayload } from './billUtils.js';
+import { calculateArrears, normalizeBillPayload } from './billUtils.js';
 
 test('legacy bill payload keeps flat id and created by as text values', () => {
   const payload = normalizeBillPayload({
@@ -57,4 +57,22 @@ test('bill payload preserves separate rate amount from charge amount', () => {
 
   assert.equal(payload.ChargeAmount, 598);
   assert.equal(payload.RateAmount, 32);
+});
+
+test('bill date fields preserve the selected calendar dates', () => {
+  const payload = normalizeBillPayload({
+    fromDate: '2026-07-31',
+    toDate: '2026-08-30',
+    billDate: '2026-11-14',
+    dueDate: '2026-12-14',
+  });
+
+  assert.equal(payload.FromDate.toISOString().slice(0, 10), '2026-07-31');
+  assert.equal(payload.ToDate.toISOString().slice(0, 10), '2026-08-30');
+  assert.equal(payload.BillDate.toISOString().slice(0, 10), '2026-11-14');
+  assert.equal(payload.DueDate.toISOString().slice(0, 10), '2026-12-14');
+});
+
+test('arrears use the corrected payment without adding the bill being edited', () => {
+  assert.equal(calculateArrears(11130.70, 0, 5058), 6072.70);
 });

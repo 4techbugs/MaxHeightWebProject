@@ -31,6 +31,9 @@ function calcGrid(units) {
 
 const empty = { flat: "", unitNo: "", meter: "", grid: "", gd: "", arrears: "", penalty: "", other: "", remarks: "" };
 const billingAddress = "Max Heiights Majestic, GH-III, Suncity Township, Village Nindar, Grand Sikar Road, Jaipur-302013";
+const blurNumberInputOnWheel = (event) => {
+  if (event.target instanceof HTMLInputElement && event.target.type === "number") event.target.blur();
+};
 
 function GenerateBill() {
   const navigate = useNavigate();
@@ -143,7 +146,7 @@ function GenerateBill() {
   const toDateText = lastDayOfMonth.toLocaleDateString("en-IN");
 
   return (
-    <div className="eb-shell">
+    <div className="eb-shell" onWheelCapture={blurNumberInputOnWheel}>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="eb-content">
         <Navbar title="Generate Bill" onMenu={() => setSidebarOpen(true)} />
