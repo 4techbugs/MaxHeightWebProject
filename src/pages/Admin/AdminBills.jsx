@@ -63,7 +63,7 @@ function mapBill(bill, billRates = {}) {
   const billDate = value(bill, "BillDate");
   return {
     id: value(bill, "ID", "Id"), receipt: billDisplayNo(value(bill, "ReceiptID") || value(bill, "ID", "Id"), billDate),
-    flat: value(bill, "UnitNo", "FlatNo", "FlatID"), customer: value(bill, "CustomerName") || "-", address: `${value(bill, "UnitNo", "FlatNo", "FlatID") || "-"}, ${BILLING_ADDRESS}`, meter: value(bill, "MeterNumber", "MeeterNumber") || "-",
+    flat: value(bill, "UnitNo", "FlatNo", "FlatID"), customer: value(bill, "CustomerName") || "-", sowoDo: value(bill, "SoWoDo") || "-", address: `${value(bill, "UnitNo", "FlatNo", "FlatID") || "-"}, ${BILLING_ADDRESS}`, meter: value(bill, "MeterNumber", "MeeterNumber") || "-",
     load: sanctionedLoadForFlat(value(bill, "UnitNo", "FlatNo", "FlatID"), value(bill, "Load")),
     grid, gridCharge, dg, dgCharge, fixed, fuelRate, fuelSearchCharge, dutyRate, ctDtRent, duty, arrears, interest, other, chargesTotal, total,
     status: String(value(bill, "Status") || "Pending").trim(), billDate, dueDate: value(bill, "DueDate"),
@@ -165,7 +165,7 @@ function createBillPdf(row) {
   val(billNo, ix + c1 + c2 + 22, infoY + 8.3, c3 - 25);
 
   label("So/WoDs.:", ix + 3, infoY + rowH + 8.3);
-  val(customerName, ix + 25, infoY + rowH + 8.3, c1 - 28);
+  val(row.sowoDo, ix + 25, infoY + rowH + 8.3, c1 - 28);
   label("Sanctioned Load:", ix + c1 + 3, infoY + rowH + 8.3);
   val(row.load || "-", ix + c1 + 38, infoY + rowH + 8.3, c2 - 41);
   label("Bill Date:", ix + c1 + c2 + 3, infoY + rowH + 8.3);

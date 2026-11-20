@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, CreditCard, FileSpreadsheet, Pencil, Plus, RefreshCw, Save, Search, Table2, Trash2, Upload, X } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const empty = { paymentMode: "", bank: "", branch: "", chequeNo: "", chequeDate: "", receiptDate: new Date().toISOString().slice(0, 10), amount: "", flat: "", customerName: "" };
 const fieldValue = (record, ...keys) => keys.map((key) => record[key]).find((value) => value !== undefined && value !== null) ?? "";
@@ -53,6 +54,8 @@ const readResponse = async (response) => {
 };
 
 function AdminPayments({ listOnly = false }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [entryMode, setEntryMode] = useState("single");
   const [form, setForm] = useState(empty);
   const [payments, setPayments] = useState([]);
@@ -150,6 +153,10 @@ function AdminPayments({ listOnly = false }) {
 
   const dateForInput = (value) => value ? new Date(value).toISOString().slice(0, 10) : "";
   const startEdit = (payment) => {
+    if (listOnly) {
+      navigate("/admin/payments", { state: { editPayment: payment } });
+      return;
+    }
     const paymentId = fieldValue(payment, "ID", "Id", "id", "PaymentID");
     setEditingId(paymentId);
     setForm({
@@ -166,6 +173,13 @@ function AdminPayments({ listOnly = false }) {
     setPaymentQuote(null); setFlatOpen(false); setMessage(""); setError("");
     window.setTimeout(() => paymentFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   };
+
+  useEffect(() => {
+    const payment = location.state?.editPayment;
+    if (listOnly || !payment) return;
+    startEdit(payment);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [listOnly, location.key, location.pathname, location.state, navigate]);
 
   const cancelEdit = () => { setEditingId(null); setForm(empty); setMessage(""); setError(""); };
 
@@ -364,6 +378,7 @@ function AdminPayments({ listOnly = false }) {
       {message && <div className="eb-admin-user-message eb-admin-user-success"><CheckCircle2 size={15} />{message}</div>}
       {error && <div className="eb-admin-user-message eb-admin-user-error">{error}</div>}
     </section>}
+    {listOnly && message && !editingId && <div className="eb-admin-user-message eb-admin-user-success"><CheckCircle2 size={15} />{message}</div>}
     {!listOnly && entryMode === "monthly" && <section className="eb-admin-table eb-payment-entry">
       <div className="eb-admin-table-head"><div><h2>Monthly payment entry</h2><p>Add payment rows manually or upload a workbook, then save the payments against each assigned flat.</p></div><FileSpreadsheet size={20} /></div>
       <input ref={paymentWorkbookRef} type="file" accept=".xls,.xlsx" hidden onChange={importMonthlyWorkbook} />

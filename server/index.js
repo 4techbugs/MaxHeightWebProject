@@ -1133,6 +1133,7 @@ app.get("/api/assigned-flats", async (request, response) => {
         SELECT DISTINCT
           [AssignFlat].[AssignFlatID], [AssignFlat].[CustomerID], [AssignFlat].[UnitNo],
           customer_details.[CustomerName] AS [customerName],
+          customer_details.[SoWoDo] AS [SoWoDo],
           customer_details.[Address] AS [address],
           customer_details.[ContactNo] AS [phone],
           bill_details.[MeterNumber] AS [meter],
@@ -1742,12 +1743,12 @@ app.get("/api/bills", async (request, response) => {
       filter = `WHERE CONVERT(NVARCHAR(50), [FlatID]) = @flat OR CONVERT(NVARCHAR(50), [FlatID]) = CONVERT(NVARCHAR(50), (SELECT TOP (1) [AssignFlatID] FROM [dbo].[AssignFlat] WHERE [UnitNo] = @flat))`;
     }
     const result = await requestBuilder.query(`
-      SELECT bills.*, customer_details.[Address] AS [CustomerAddress], af.[UnitNo]
+      SELECT bills.*, customer_details.[Address] AS [CustomerAddress], customer_details.[SoWoDo] AS [SoWoDo], af.[UnitNo]
       FROM [dbo].[tb_ElectricBill] AS bills
       LEFT JOIN [dbo].[AssignFlat] AS af
         ON CONVERT(NVARCHAR(50), af.[AssignFlatID]) = CONVERT(NVARCHAR(50), bills.[FlatID])
       LEFT JOIN [dbo].[Customer] AS customer_details
-        ON LTRIM(RTRIM(CONVERT(NVARCHAR(50), customer_details.[CustomerID]))) = LTRIM(RTRIM(CONVERT(NVARCHAR(50), bills.[CustomerID])))
+        ON customer_details.[CustomerID] = COALESCE(af.[CustomerID], bills.[CustomerID])
       ${filter}
       ORDER BY [BillDate] DESC, [ID] DESC
     `);

@@ -21,3 +21,4 @@ Expected check:
 - POST http://maxheight.4techbugs.in/api/admin/payments/import should no longer return 404.
 - If the request data has a workbook/row issue, it should return a JSON validation message instead.
 - GET http://maxheight.4techbugs.in/api/bills/{existing-bill-id}/arrears should return JSON containing the refreshed arrears amount. This endpoint is required when opening a bill for editing.
+- Bill records returned by GET /api/bills should include the related customer's SoWoDo value for bill previews.

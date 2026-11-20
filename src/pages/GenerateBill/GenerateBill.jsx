@@ -232,7 +232,7 @@ function GenerateBill() {
                   </div>
                   <div className="eb-ref-field-row compact">
                     <span>SoWoDo:</span>
-                    <strong>{customerName}</strong>
+                    <strong>{activeProfile?.SoWoDo || "-"}</strong>
                   </div>
                   <div className="eb-ref-field-row address-row">
                     <span>Address:</span>
