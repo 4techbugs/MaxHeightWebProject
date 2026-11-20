@@ -4,7 +4,7 @@ import cors from "cors";
 import express from "express";
 import { sql } from "./db.js";
 import { getDbPool } from "./db.js";
-import { normalizeBillPayload } from "./billUtils.js";
+import { calculateArrears, normalizeBillPayload } from "./billUtils.js";
 
 const app = express();
 const port = Number(process.env.API_PORT || 3001);
@@ -168,6 +168,77 @@ function calculatePenalty(baseAmount, dueDate, paymentDate) {
   const overdueDays = Math.max(0, Math.floor((paid - due) / 86400000));
   const penaltyAmount = Math.round(baseAmount * 0.18 * overdueDays / 365 * 100) / 100;
   return { overdueDays, penaltyAmount, totalAmount: Math.round((baseAmount + penaltyAmount) * 100) / 100 };
+}
+
+async function calculateBillArrears(pool, flatId, billDate, excludedBillId = null) {
+  const result = await pool.request()
+    .input("flatId", sql.Int, Number(flatId))
+    .input("billDate", sql.DateTime, billDate)
+    .input("excludedBillId", sql.Int, excludedBillId)
+    .query(`
+      WITH prior_bills AS (
+        SELECT [BillDate], [ID], [PreviousBalance], [TotalPaidAmount], [RateAmount], [ChargeAmount],
+          [Charge], [DGAmount], [FuelSearchCharge], [CTDTRent], [DutyCharge], [FixedCharge],
+          [MiscCharge], [OtherCharge], [penalty], [Discount]
+        FROM [dbo].[tb_ElectricBill]
+        WHERE TRY_CONVERT(INT, [FlatID]) = @flatId
+          AND [BillDate] < @billDate
+          AND (@excludedBillId IS NULL OR [ID] <> @excludedBillId)
+      ),
+      prior_totals AS (
+        SELECT
+          COUNT(*) AS [BillCount],
+          SUM(CASE
+            WHEN COALESCE([TotalPaidAmount], 0) > 0
+            THEN [TotalPaidAmount] - COALESCE([PreviousBalance], 0)
+            ELSE COALESCE(NULLIF([RateAmount], 0), NULLIF([ChargeAmount], 0), [Charge], 0)
+              + COALESCE([DGAmount], 0)
+              + COALESCE([FuelSearchCharge], 0)
+              + COALESCE([CTDTRent], 0)
+              + COALESCE([DutyCharge], 0)
+              + COALESCE(NULLIF([FixedCharge], 0), [MiscCharge], 0)
+              + COALESCE([OtherCharge], 0)
+              + COALESCE([penalty], 0)
+              - COALESCE([Discount], 0)
+          END) AS [BilledCharges]
+        FROM prior_bills
+      )
+      SELECT
+        prior_totals.[BillCount],
+        COALESCE(prior_totals.[BilledCharges], 0) AS [BilledCharges],
+        COALESCE(opening_bill.[OpeningBalance], balance_details.[Amount]) AS [OpeningBalance],
+        balance_details.[Amount] AS [LegacyOpeningBalance],
+        COALESCE(payment_totals.[PaidAmount], 0) AS [PaidAmount]
+      FROM prior_totals
+      OUTER APPLY (
+        SELECT TOP (1)
+          COALESCE([PreviousBalance], 0) AS [OpeningBalance],
+          [BillDate] AS [OpeningBillDate]
+        FROM prior_bills
+        ORDER BY [BillDate], [ID]
+      ) AS opening_bill
+      OUTER APPLY (
+        SELECT TOP (1) [Amount]
+        FROM [dbo].[Tb_Electricity_priviousBalance]
+        WHERE [FlatID] = @flatId
+        ORDER BY [Id] DESC
+      ) AS balance_details
+      OUTER APPLY (
+        SELECT SUM(COALESCE([Amount], 0)) AS [PaidAmount]
+        FROM [dbo].[tb_Payment]
+        WHERE TRY_CONVERT(INT, [FlatID]) = @flatId
+          AND LTRIM(RTRIM(COALESCE([Status], ''))) = 'Active'
+          AND (opening_bill.[OpeningBillDate] IS NULL OR [ReceiptDate] >= opening_bill.[OpeningBillDate])
+          AND [ReceiptDate] < DATEADD(DAY, 1, @billDate)
+      ) AS payment_totals
+    `);
+  const priorBalance = result.recordset[0];
+  if (Number(priorBalance?.BillCount) <= 0 && priorBalance?.LegacyOpeningBalance == null) return null;
+  return calculateArrears(
+    priorBalance.OpeningBalance,
+    priorBalance.BilledCharges,
+    priorBalance.PaidAmount,
+  );
 }
 
 async function getPaymentQuote(pool, flat, paymentDate = new Date()) {
@@ -1529,6 +1600,26 @@ app.put("/api/bills/:id", async (request, response) => {
     return response.status(503).json({ message: "Unable to update the bill right now." });
   }
 });
+
+app.get("/api/bills/:id/arrears", async (request, response) => {
+  const id = Number(request.params.id);
+  if (!Number.isInteger(id) || id <= 0) return response.status(400).json({ message: "A valid bill ID is required." });
+  try {
+    await ensureElectricBillTable();
+    const pool = await getDbPool();
+    const billResult = await pool.request()
+      .input("id", sql.Int, id)
+      .query("SELECT TOP (1) [FlatID], [BillDate], [PreviousBalance] FROM [dbo].[tb_ElectricBill] WHERE [ID] = @id");
+    if (!billResult.recordset.length) return response.status(404).json({ message: "Bill not found." });
+    const bill = billResult.recordset[0];
+    const recalculatedArrears = await calculateBillArrears(pool, bill.FlatID, bill.BillDate, id);
+    return response.json({ arrears: recalculatedArrears ?? Number(bill.PreviousBalance || 0) });
+  } catch (error) {
+    console.error("Bill arrears refresh failed:", error.message);
+    return response.status(503).json({ message: "Unable to refresh this bill's previous balance." });
+  }
+});
+
 app.get("/api/bills", async (request, response) => {
   try {
     const pool = await getDbPool();

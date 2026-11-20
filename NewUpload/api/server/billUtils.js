@@ -1,3 +1,9 @@
+export function calculateArrears(openingBalance, billedCharges, paidAmount) {
+  return Math.max(0, Math.round((
+    Number(openingBalance || 0) + Number(billedCharges || 0) - Number(paidAmount || 0)
+  ) * 100) / 100);
+}
+
 export function normalizeBillPayload(payload = {}) {
   const safeNumber = (value, fallback = 0) => {
     const parsed = Number(value ?? fallback);

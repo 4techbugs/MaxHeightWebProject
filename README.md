@@ -15,7 +15,7 @@ The API uses port 3001 by default. Vite forwards `/api` requests to the local AP
 
 Run `npm run build` to create the frontend in `dist`. Start the backend with `npm run server`. The root `web.config` contains IIS rewrite rules for the frontend and the Node API on port 3001.
 
-The `NewUpload/api` directory contains the prepared backend update, including `POST /api/admin/payments/import`. Follow `NewUpload/UPLOAD-INSTRUCTIONS.txt` to upload it to the existing server. Preserve the server's `.env` and restart the backend after replacing files.
+The `NewUpload/api` directory contains the prepared backend update, including `POST /api/admin/payments/import` and `GET /api/bills/:id/arrears` used when editing bills. Follow `NewUpload/UPLOAD-INSTRUCTIONS.txt` to upload it to the existing server. Preserve the server's `.env` and restart the backend after replacing files.
 
 ## Repository contents
 
