@@ -1632,7 +1632,8 @@ app.get("/api/bills", async (request, response) => {
       filter = `WHERE CONVERT(NVARCHAR(50), [FlatID]) = @flat OR CONVERT(NVARCHAR(50), [FlatID]) = CONVERT(NVARCHAR(50), (SELECT TOP (1) [AssignFlatID] FROM [dbo].[AssignFlat] WHERE [UnitNo] = @flat))`;
     }
     const result = await requestBuilder.query(`
-      SELECT bills.*, customer_details.[Address] AS [CustomerAddress], customer_details.[SoWoDo] AS [SoWoDo]
+      SELECT bills.*, customer_details.[Address] AS [CustomerAddress], customer_details.[SoWoDo] AS [SoWoDo],
+        af.[UnitNo] AS [UnitNo]
       FROM [dbo].[tb_ElectricBill] AS bills
       LEFT JOIN [dbo].[AssignFlat] AS af
         ON CONVERT(NVARCHAR(50), af.[AssignFlatID]) = CONVERT(NVARCHAR(50), bills.[FlatID])
